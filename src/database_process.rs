@@ -1,29 +1,25 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use entity::{audio_streams, directories, files, media_files, subtitle_files, subtitle_streams, video_streams};
+use entity::{
+    audio_streams, directories, files, media_files, subtitle_files, subtitle_streams, video_streams,
+};
 use imohash::Hasher;
+use sea_orm::{
+    ActiveValue::Set, DatabaseConnection, EntityTrait, InsertResult, prelude::DateTimeWithTimeZone,
+};
+use std::path::Path;
 use tokio::fs;
-use std::path::{Path};
-use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait, InsertResult, prelude::DateTimeWithTimeZone};
-
 
 use crate::{database_orm, media};
 use database_orm::{
-    get_directory_id
-    , get_file_primary_id_from_name
-    , get_media_file_primary_id_from_file_id
-    , get_subtitle_file_primary_id_from_file_id
-    , get_video_stream_primary_id_from_file_stream
-    , get_audio_stream_primary_id_from_file_stream
-    , get_subtitle_stream_primary_id_from_file_stream
+    get_audio_stream_primary_id_from_file_stream, get_directory_id, get_file_primary_id_from_name,
+    get_media_file_primary_id_from_file_id, get_subtitle_file_primary_id_from_file_id,
+    get_subtitle_stream_primary_id_from_file_stream, get_video_stream_primary_id_from_file_stream,
 };
 
 use media::{AudioStream, SubtitleStream, VideoStream};
 
-pub async fn process_directory(
-    database: &DatabaseConnection,
-    directory: &Path
-) -> Result<i64> {
+pub async fn process_directory(database: &DatabaseConnection, directory: &Path) -> Result<i64> {
     let dir_str = directory.to_str().expect("Failed to convert to str");
     let mut directory_id: Option<i64> = get_directory_id(database, dir_str).await?;
 
@@ -31,7 +27,9 @@ pub async fn process_directory(
         // navigate the ancestors in reverse order to build the full tree
         let ancestors: Vec<&Path> = directory.ancestors().collect();
         for ancestor in ancestors.iter().rev() {
-            let anscestor_str: &str = ancestor.to_str().expect("Failed to convert anscestor to str");
+            let anscestor_str: &str = ancestor
+                .to_str()
+                .expect("Failed to convert anscestor to str");
             let ancestor_directory_id = get_directory_id(database, anscestor_str).await?;
 
             // If ancestor already exists, skip
@@ -65,16 +63,25 @@ pub async fn process_file(
     hasher: Hasher,
 ) -> Result<i64> {
     let file_path_str = file.to_str().expect("Failed to convert to str");
-    let file_name = file.file_name().expect("Failed to get file name").to_str().expect("Failed to convert to str");
+    let file_name = file
+        .file_name()
+        .expect("Failed to get file name")
+        .to_str()
+        .expect("Failed to convert to str");
 
     // TODO: Check via hash first, if exists, then skip, if not then fallback to path and then update info
-    let mut file_id = get_file_primary_id_from_name(database, directory_id, file_name).await?;
+    let mut file_id = get_file_primary_id_from_name(database, directory_id, file_name)
+        .await
+        .with_context(|| {
+            format!("failed looking up file from directory_id={directory_id} file_name={file_name}")
+        })?;
 
     match file_id {
-        Some(_) => {},
+        Some(_) => {}
         None => {
             println!("Inserting file: {}", file.display());
-            let extension = file.extension()
+            let extension = file
+                .extension()
                 .expect("Failed to get extension")
                 .to_str()
                 .expect("Failed to convert to string");
@@ -100,8 +107,16 @@ pub async fn process_file(
                 modified_at: Set(modified_chrono),
                 ..Default::default()
             };
-            let res: InsertResult<files::ActiveModel> =
-                files::Entity::insert(file).exec(database).await?;
+            let res: InsertResult<files::ActiveModel> = files::Entity::insert(file)
+                .exec(database)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed inserting files: \
+                            directory_id={directory_id}, \
+                            name={file_name}"
+                    )
+                })?;
 
             file_id = Some(res.last_insert_id);
         }
@@ -110,21 +125,27 @@ pub async fn process_file(
     file_id.context("Failed to generate file id")
 }
 
-pub async fn process_media_file(
-    database: &DatabaseConnection,
-    file_id: i64,
-) -> Result <i64> {
-    let mut media_id = get_media_file_primary_id_from_file_id(database, file_id).await?;
+pub async fn process_media_file(database: &DatabaseConnection, file_id: i64) -> Result<i64> {
+    let mut media_id = get_media_file_primary_id_from_file_id(database, file_id)
+        .await
+        .with_context(|| format!("failed looking up media_file from file_id={file_id}"))?;
 
     match media_id {
-        Some(_) => {},
+        Some(_) => {}
         None => {
             let media: media_files::ActiveModel = media_files::ActiveModel {
                 file_id: Set(file_id),
                 ..Default::default()
             };
-            let res: InsertResult<media_files::ActiveModel> =
-                media_files::Entity::insert(media).exec(database).await?;
+            let res: InsertResult<media_files::ActiveModel> = media_files::Entity::insert(media)
+                .exec(database)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed inserting media_files: \
+                            file_id={file_id}"
+                    )
+                })?;
 
             media_id = Some(res.last_insert_id);
         }
@@ -137,11 +158,13 @@ pub async fn process_subtitle_file(
     database: &DatabaseConnection,
     file_id: i64,
     media_file_id: i64,
-) -> Result <i64> {
-    let mut subtitle_id = get_subtitle_file_primary_id_from_file_id(database, file_id).await?;
+) -> Result<i64> {
+    let mut subtitle_id = get_subtitle_file_primary_id_from_file_id(database, file_id)
+        .await
+        .with_context(|| format!("failed looking up subtitle_file from file_id={file_id}"))?;
 
     match subtitle_id {
-        Some(_) => {},
+        Some(_) => {}
         None => {
             let subtitle: subtitle_files::ActiveModel = subtitle_files::ActiveModel {
                 file_id: Set(file_id),
@@ -149,7 +172,16 @@ pub async fn process_subtitle_file(
                 ..Default::default()
             };
             let res: InsertResult<subtitle_files::ActiveModel> =
-                subtitle_files::Entity::insert(subtitle).exec(database).await?;
+                subtitle_files::Entity::insert(subtitle)
+                    .exec(database)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed inserting subtitle_files: \
+                                file_id={file_id}, \
+                                media_file_id={media_file_id}"
+                        )
+                    })?;
 
             subtitle_id = Some(res.last_insert_id);
         }
@@ -165,11 +197,18 @@ pub async fn process_video_stream(
 ) -> Result<i64> {
     let video_index = video.index;
 
-    let mut video_stream_id = get_video_stream_primary_id_from_file_stream(database, file_id, video_index).await?;
+    let mut video_stream_id =
+        get_video_stream_primary_id_from_file_stream(database, file_id, video_index)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed looking up audio stream file_id={file_id}, stream_index={video_index}"
+                )
+            })?;
 
     match video_stream_id {
         // TODO: Handle updating existing video_stream
-        Some(_) => {},
+        Some(_) => {}
         None => {
             let vid_bit: Option<i64> = video.bitdepth.map(|l| l as i64);
             let stream: video_streams::ActiveModel = video_streams::ActiveModel {
@@ -184,7 +223,16 @@ pub async fn process_video_stream(
                 ..Default::default()
             };
             let res: InsertResult<video_streams::ActiveModel> =
-                video_streams::Entity::insert(stream).exec(database).await?;
+                video_streams::Entity::insert(stream)
+                    .exec(database)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed inserting video_streams: \
+                            file_id={file_id}, \
+                            stream_index={video_index}"
+                        )
+                    })?;
 
             video_stream_id = Some(res.last_insert_id);
         }
@@ -200,11 +248,18 @@ pub async fn process_audio_stream(
 ) -> Result<i64> {
     let audio_index = audio.index;
 
-    let mut audio_stream_id = get_audio_stream_primary_id_from_file_stream(database, file_id, audio_index).await?;
+    let mut audio_stream_id =
+        get_audio_stream_primary_id_from_file_stream(database, file_id, audio_index)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed looking up audio stream file_id={file_id}, stream_index={audio_index}"
+                )
+            })?;
 
     match audio_stream_id {
         // TODO: Handle updating existing audio_stream
-        Some(_) => {},
+        Some(_) => {}
         None => {
             let audio_lang: Option<i64> = audio.language.map(|l| l as i64);
             let stream: audio_streams::ActiveModel = audio_streams::ActiveModel {
@@ -220,7 +275,16 @@ pub async fn process_audio_stream(
                 ..Default::default()
             };
             let res: InsertResult<audio_streams::ActiveModel> =
-                audio_streams::Entity::insert(stream).exec(database).await?;
+                audio_streams::Entity::insert(stream)
+                    .exec(database)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed inserting audio_streams: \
+                            file_id={file_id}, \
+                            stream_index={audio_index}"
+                        )
+                    })?;
 
             audio_stream_id = Some(res.last_insert_id);
         }
@@ -229,7 +293,6 @@ pub async fn process_audio_stream(
     audio_stream_id.context("Failed to generate audio stream id")
 }
 
-
 pub async fn process_subtitle_stream(
     database: &DatabaseConnection,
     file_id: i64,
@@ -237,11 +300,18 @@ pub async fn process_subtitle_stream(
 ) -> Result<i64> {
     let sub_index = subtitle.index;
 
-    let mut subtitle_stream_id: Option<i64> = get_subtitle_stream_primary_id_from_file_stream(database, file_id, sub_index).await?;
+    let mut subtitle_stream_id =
+        get_subtitle_stream_primary_id_from_file_stream(database, file_id, sub_index)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed looking up subtitle stream file_id={file_id}, stream_index={sub_index}"
+                )
+            })?;
 
     match subtitle_stream_id {
         // TODO: Handle updating existing subtitle_streams
-        Some(_) => {},
+        Some(_) => {}
         None => {
             let sub_lang: Option<i64> = subtitle.language.map(|l| l as i64);
             let stream: subtitle_streams::ActiveModel = subtitle_streams::ActiveModel {
@@ -255,8 +325,16 @@ pub async fn process_subtitle_stream(
                 is_sdh: Set(subtitle.sdh),
                 ..Default::default()
             };
-            let res: InsertResult<subtitle_streams::ActiveModel> =
-                subtitle_streams::Entity::insert(stream).exec(database).await?;
+            let res = subtitle_streams::Entity::insert(stream)
+                .exec(database)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed inserting subtitle_stream: \
+                            file_id={file_id}, \
+                            stream_index={sub_index}"
+                    )
+                })?;
 
             subtitle_stream_id = Some(res.last_insert_id);
         }

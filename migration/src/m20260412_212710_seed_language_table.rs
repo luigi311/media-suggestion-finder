@@ -1,4 +1,4 @@
-use sea_orm_migration::{prelude::*};
+use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -6,7 +6,6 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-
         let stmt = Query::insert()
             .into_table("languages")
             .columns(["iso_639_1", "iso_639_2", "name"])
@@ -28,9 +27,7 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let stmt = Query::delete()
-            .from_table("languages")
-            .to_owned();
+        let stmt = Query::delete().from_table("languages").to_owned();
 
         manager.execute(stmt).await?;
 

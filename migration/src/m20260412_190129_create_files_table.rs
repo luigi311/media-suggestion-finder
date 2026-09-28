@@ -35,13 +35,13 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                .name("uq_files_directory_id_name")
-                .if_not_exists()
-                .table("files")
-                .col("directory_id")
-                .col("name")
-                .unique()
-                .to_owned()
+                    .name("uq_files_directory_id_name")
+                    .if_not_exists()
+                    .table("files")
+                    .col("directory_id")
+                    .col("name")
+                    .unique()
+                    .to_owned(),
             )
             .await?;
 

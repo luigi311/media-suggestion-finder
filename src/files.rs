@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use tokio::fs::read_dir;
 use anyhow::Result;
 use async_recursion::async_recursion;
+use std::path::PathBuf;
+use tokio::fs::read_dir;
 
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "mkv", "avi", "mov", "wmv"];
 const AUDIO_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "ogg"];
@@ -17,13 +17,11 @@ pub struct DirectoryScan {
 #[derive(Clone, Debug)]
 pub struct MediaPair {
     pub media: Option<PathBuf>,
-    pub subtitles: Vec<PathBuf>
+    pub subtitles: Vec<PathBuf>,
 }
 
 #[async_recursion]
-pub async fn iterate_folder(
-    path: PathBuf,
-) -> Result<Vec<DirectoryScan>> {
+pub async fn iterate_folder(path: PathBuf) -> Result<Vec<DirectoryScan>> {
     let mut results: Vec<DirectoryScan> = Vec::new();
     let mut media_files: Vec<PathBuf> = Vec::new();
     let mut subtitle_files: Vec<PathBuf> = Vec::new();
@@ -43,9 +41,7 @@ pub async fn iterate_folder(
         };
         let ext = ext.to_lowercase();
 
-        if VIDEO_EXTENSIONS.contains(&ext.as_str())
-            || AUDIO_EXTENSIONS.contains(&ext.as_str())
-        {
+        if VIDEO_EXTENSIONS.contains(&ext.as_str()) || AUDIO_EXTENSIONS.contains(&ext.as_str()) {
             media_files.push(entry_path);
         } else if SUBTITLE_EXTENSIONS.contains(&ext.as_str()) {
             subtitle_files.push(entry_path);
@@ -53,7 +49,11 @@ pub async fn iterate_folder(
     }
 
     if !media_files.is_empty() || !subtitle_files.is_empty() {
-        results.push(DirectoryScan { path, media_files, subtitle_files });
+        results.push(DirectoryScan {
+            path,
+            media_files,
+            subtitle_files,
+        });
     }
     results.extend(subdir_results);
 
@@ -65,18 +65,18 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
 
     for directory in files {
         if directory.media_files.is_empty() {
-            pairs.push(MediaPair{
+            pairs.push(MediaPair {
                 media: None,
-                subtitles: directory.subtitle_files
+                subtitles: directory.subtitle_files,
             });
             continue;
         }
 
         if directory.subtitle_files.is_empty() {
             for media in directory.media_files {
-                pairs.push(MediaPair{
+                pairs.push(MediaPair {
                     media: Some(media),
-                    subtitles: Vec::new()
+                    subtitles: Vec::new(),
                 });
             }
             continue;
@@ -97,7 +97,7 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
         // is a prefix of another.
         media_with_stems.sort_by_key(|(stem, _)| std::cmp::Reverse(stem.len()));
 
-         // Track which media each entry belongs to.
+        // Track which media each entry belongs to.
         let mut buckets: Vec<(PathBuf, Vec<PathBuf>)> = media_with_stems
             .iter()
             .map(|(_, path)| (path.clone(), Vec::new()))

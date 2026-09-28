@@ -25,7 +25,6 @@ impl MigratorTrait for Migrator {
             Box::new(m20260412_191001_create_audio_streams_table::Migration),
             Box::new(m20260412_191344_subtitle_streams_table::Migration),
             Box::new(m20260412_212710_seed_language_table::Migration),
-
         ]
     }
 }

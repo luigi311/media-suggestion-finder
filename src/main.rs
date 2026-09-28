@@ -1,22 +1,23 @@
+use anyhow::{Context, Result};
 use imohash::Hasher;
 use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
-use anyhow::{Context, Result};
 
 use config::{Config, ConfigError, File};
 
-
 mod database_orm;
+mod database_process;
 mod files;
 mod media;
-mod database_process;
 
+use database_orm::database_connect;
+use files::{find_media_subtitle_pairs, iterate_folder};
 use media::{Media, parse_media};
-use files::{iterate_folder, find_media_subtitle_pairs};
-use database_orm::{database_connect};
 
-use crate::database_process::{process_directory, process_file, process_media_file, process_subtitle_file, process_video_stream, process_audio_stream, process_subtitle_stream};
-
+use crate::database_process::{
+    process_audio_stream, process_directory, process_file, process_media_file,
+    process_subtitle_file, process_subtitle_stream, process_video_stream,
+};
 
 struct AppConfig {
     pub dsn: String,
@@ -42,7 +43,7 @@ impl AppConfig {
 #[derive(Clone, Debug)]
 struct ParsedMedia {
     media: Media,
-    subtitles: Vec<Media>
+    subtitles: Vec<Media>,
 }
 
 async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Result<()> {
@@ -58,10 +59,11 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
         let parsed_media: Media = match media_file {
             None => {
                 println!("No file for {:?}, skipping", &file);
-                continue
-            },
+                continue;
+            }
             Some(media_file) => {
-                let file_name = media_file.file_name()
+                let file_name = media_file
+                    .file_name()
                     .expect("Failed to get filename")
                     .to_str()
                     .expect("Failed to convert to string")
@@ -77,7 +79,8 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
 
         let subtitle_files = &file.subtitles;
         for sub_file in subtitle_files {
-            let file_name = sub_file.file_name()
+            let file_name = sub_file
+                .file_name()
                 .expect("Failed to get filename")
                 .to_str()
                 .expect("Failed to convert to string")
@@ -90,11 +93,18 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
             parsed_subtitles.push(parse_subtitle);
         }
 
-        parsed.push(ParsedMedia{ media: parsed_media, subtitles: parsed_subtitles })
+        parsed.push(ParsedMedia {
+            media: parsed_media,
+            subtitles: parsed_subtitles,
+        })
     }
 
     for media in parsed {
-        let parent = media.media.path.parent().expect("Failed to get parent path");
+        let parent = media
+            .media
+            .path
+            .parent()
+            .expect("Failed to get parent path");
         let directory_id = process_directory(&orm_database, parent).await?;
         println!("directory_id: {directory_id}");
         let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher).await?;
@@ -109,21 +119,62 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
 
         // Audio Streams
         for audio in media.media.audios {
-            println!("Processing audio index {}", audio.index);
-            process_audio_stream(&orm_database, file_id, audio).await?;
+            let audio_index = audio.index;
+
+            process_audio_stream(&orm_database, file_id, audio)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed processing audio stream {audio_index} for {} (file_id={file_id})",
+                        media.media.path.display()
+                    )
+                })?;
         }
 
         // Subtitle streams
         for sub in media.media.subtitles {
-            process_subtitle_stream(&orm_database, file_id, sub).await?;
+            let sub_index = sub.index;
+
+            process_subtitle_stream(&orm_database, file_id, sub)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed processing subtitle stream {sub_index} for {} (file_id={file_id})",
+                        media.media.path.display()
+                    )
+                })?;
         }
 
         for subtitle in media.subtitles {
             println!("Processing {}", subtitle.path.display());
-            let sub_file_id = process_file(&orm_database, directory_id, &subtitle.path, hasher).await?;
-            let _ = process_subtitle_file(&orm_database, sub_file_id, media_id).await?;
+            let sub_file_id = process_file(&orm_database, directory_id, &subtitle.path, hasher)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed processing subtitle file {}",
+                        subtitle.path.display()
+                    )
+                })?;
+            process_subtitle_file(&orm_database, sub_file_id, media_id)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed associating subtitle {} with media_id={media_id}",
+                        subtitle.path.display()
+                    )
+                })?;
+
             for sub in subtitle.subtitles {
-                let _ = process_subtitle_stream(&orm_database, sub_file_id, sub).await?;
+                let sub_index = sub.index;
+
+                process_subtitle_stream(&orm_database, file_id, sub)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed processing subtitle stream {sub_index} for {} (file_id={file_id})",
+                            media.media.path.display()
+                        )
+                    })?;
             }
         }
     }
@@ -133,8 +184,7 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config = AppConfig::new()
-        .context("failed to load application configuration")?;
+    let config = AppConfig::new().context("failed to load application configuration")?;
 
     let orm_database = database_connect(&config.dsn)
         .await

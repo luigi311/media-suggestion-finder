@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use anyhow::{Result, anyhow};
 use mediainfo::{self, MediaInfo, Stream, StreamKind};
-use anyhow::{anyhow, Result};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Language {
@@ -14,7 +14,7 @@ pub enum Language {
     Korean,
     Russian,
     Italian,
-    Portuguese
+    Portuguese,
 }
 
 #[derive(Clone, Debug)]
@@ -25,8 +25,7 @@ pub struct VideoStream {
     pub height: i32,
     pub bitdepth: Option<i8>,
     pub hdr: Option<String>,
-    pub bitrate:Option<i64>
-
+    pub bitrate: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -36,7 +35,7 @@ pub struct AudioStream {
     pub codec: String,
     pub language: Option<Language>,
     pub channels: String,
-    pub bitrate:Option<i64>,
+    pub bitrate: Option<i64>,
     pub default: bool,
     pub forced: bool,
 }
@@ -67,7 +66,7 @@ fn parse_language(language_str: &str) -> Result<Option<Language>> {
         "german" | "de" => Some(Language::German),
         "japanese" | "ja" => Some(Language::Japanese),
         "italian" | "it" => Some(Language::Italian),
-        _ => None
+        _ => None,
     };
 
     Ok(language)
@@ -77,7 +76,7 @@ fn parse_bitdepth(bitdepth_str: &str) -> Option<i8> {
     let bitdepth_parse: Result<i8, _> = bitdepth_str.parse();
     match bitdepth_parse {
         Ok(i) => Some(i),
-        _ => None
+        _ => None,
     }
 }
 
@@ -85,16 +84,15 @@ fn parse_bitrate(bitrate_str: &str) -> Option<i64> {
     let bitrate_parse: Result<i64, _> = bitrate_str.parse();
     match bitrate_parse {
         Ok(i) => Some(i),
-        _ => None
+        _ => None,
     }
 }
-
 
 fn str_to_bool(s: &str) -> Result<bool> {
     match s.trim().to_lowercase().as_str() {
         "true" | "yes" | "1" => Ok(true),
         "false" | "no" | "0" | "" => Ok(false),
-        _ => Err(anyhow!("Failed to parse bool {}", s))
+        _ => Err(anyhow!("Failed to parse bool {}", s)),
     }
 }
 
@@ -129,7 +127,15 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
                 let bitdepth = parse_bitdepth(stream.get("BitDepth"));
                 let bitrate = parse_bitrate(stream.get("BitRate"));
 
-                videos.push(VideoStream{index, codec, width, height, bitdepth, bitrate, hdr: None });
+                videos.push(VideoStream {
+                    index,
+                    codec,
+                    width,
+                    height,
+                    bitdepth,
+                    bitrate,
+                    hdr: None,
+                });
             }
 
             for stream in audio_streams {
@@ -143,7 +149,16 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
                 let default = str_to_bool(stream.get("Default"))?;
                 let forced = str_to_bool(stream.get("Forced"))?;
 
-                audios.push(AudioStream{ index, title, codec, language, channels, bitrate, default, forced });
+                audios.push(AudioStream {
+                    index,
+                    title,
+                    codec,
+                    language,
+                    channels,
+                    bitrate,
+                    default,
+                    forced,
+                });
             }
 
             for stream in subtitle_streams {
@@ -157,7 +172,15 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
                 let sdh = false;
                 let default = str_to_bool(stream.get("Default"))?;
 
-                subtitles.push(SubtitleStream{index, title, codec, language, forced, sdh, default});
+                subtitles.push(SubtitleStream {
+                    index,
+                    title,
+                    codec,
+                    language,
+                    forced,
+                    sdh,
+                    default,
+                });
             }
         }
         // MediaInfo simply couldn't recognize/open the file.
@@ -183,5 +206,10 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
         }
     }
 
-    Ok(Media{ path: path.clone(), videos, audios, subtitles })
+    Ok(Media {
+        path: path.clone(),
+        videos,
+        audios,
+        subtitles,
+    })
 }
