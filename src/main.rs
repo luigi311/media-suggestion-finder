@@ -108,13 +108,33 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
             .path
             .parent()
             .expect("Failed to get parent path");
-        let directory_id = process_directory(&orm_database, parent).await?;
-        let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher).await?;
-        let media_id = process_media_file(&orm_database, file_id).await?;
+        let directory_id = process_directory(&orm_database, parent)
+            .await
+            .with_context(|| format!("failed processing directory {}", parent.display()))?;
+        let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher)
+            .await
+            .with_context(|| format!("failed processing file {}", media.media.path.display()))?;
+        let media_id = process_media_file(&orm_database, file_id)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed processing media file file_id={file_id} {}",
+                    media.media.path.display()
+                )
+            })?;
 
         // Video Streams
         for video in media.media.videos {
-            process_video_stream(&orm_database, file_id, video).await?;
+            let video_index = video.index;
+
+            process_video_stream(&orm_database, file_id, video)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed processing video stream {video_index} for {} (file_id={file_id})",
+                        media.media.path.display()
+                    )
+                })?;
         }
 
         // Audio Streams
