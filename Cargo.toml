@@ -1,0 +1,23 @@
+[package]
+name = "media-suggestion-finder"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = [
+    ".",
+    "entity",
+    "migration",
+]
+
+[dependencies]
+anyhow = "1.0.104"
+async-recursion = "1.1.1"
+chrono = "0.4.44"
+config = "0.15.22"
+entity = { path = "entity" }
+imohash = "0.1.2"
+mediainfo-rust = "0.1.0"
+migration = { path = "migration" }
+sea-orm = { version = "2.0", features = ["sqlx-sqlite", "runtime-tokio", "with-chrono"] }
+tokio = { version = "1.51", features = ["full"] }

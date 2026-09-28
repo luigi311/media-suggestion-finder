@@ -1,0 +1,154 @@
+use imohash::Hasher;
+use sea_orm::DatabaseConnection;
+use std::path::PathBuf;
+use anyhow::{Context, Result};
+
+use config::{Config, ConfigError, File};
+
+
+mod database_orm;
+mod files;
+mod media;
+mod database_process;
+
+use media::{Media, parse_media};
+use files::{iterate_folder, find_media_subtitle_pairs};
+use database_orm::{database_connect};
+
+use crate::database_process::{process_directory, process_file, process_media_file, process_subtitle_file, process_video_stream, process_audio_stream, process_subtitle_stream};
+
+
+struct AppConfig {
+    pub dsn: String,
+    pub media_path: PathBuf,
+}
+
+impl AppConfig {
+    pub fn new() -> Result<Self, ConfigError> {
+        let settings = Config::builder()
+            .add_source(File::with_name("config.toml"))
+            .build()?;
+
+        let media_path: String = settings.get_string("media_path")?;
+        let dsn: String = settings.get_string("dsn")?;
+
+        Ok(AppConfig {
+            dsn,
+            media_path: media_path.into(),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ParsedMedia {
+    media: Media,
+    subtitles: Vec<Media>
+}
+
+async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Result<()> {
+    let hasher = Hasher::new();
+    let all_files = iterate_folder(path).await.unwrap();
+
+    let files = find_media_subtitle_pairs(all_files).await;
+    let mut parsed: Vec<ParsedMedia> = Vec::new();
+
+    for file in files {
+        let mut parsed_subtitles: Vec<Media> = Vec::new();
+        let media_file = &file.media;
+        let parsed_media: Media = match media_file {
+            None => {
+                println!("No file for {:?}, skipping", &file);
+                continue
+            },
+            Some(media_file) => {
+                let file_name = media_file.file_name()
+                    .expect("Failed to get filename")
+                    .to_str()
+                    .expect("Failed to convert to string")
+                    .to_string();
+
+                let Ok(parse_media) = parse_media(media_file).await else {
+                    println!("Failed to parse {file_name}");
+                    continue;
+                };
+                parse_media
+            }
+        };
+
+        let subtitle_files = &file.subtitles;
+        for sub_file in subtitle_files {
+            let file_name = sub_file.file_name()
+                .expect("Failed to get filename")
+                .to_str()
+                .expect("Failed to convert to string")
+                .to_string();
+
+            let Ok(parse_subtitle) = parse_media(sub_file).await else {
+                println!("Failed to parse {file_name}");
+                continue;
+            };
+            parsed_subtitles.push(parse_subtitle);
+        }
+
+        parsed.push(ParsedMedia{ media: parsed_media, subtitles: parsed_subtitles })
+    }
+
+    for media in parsed {
+        let parent = media.media.path.parent().expect("Failed to get parent path");
+        let directory_id = process_directory(&orm_database, parent).await?;
+        println!("directory_id: {directory_id}");
+        let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher).await?;
+        println!("file_id: {file_id}");
+        let media_id = process_media_file(&orm_database, file_id).await?;
+        println!("media_id: {media_id}");
+
+        // Video Streams
+        for video in media.media.videos {
+            process_video_stream(&orm_database, file_id, video).await?;
+        }
+
+        // Audio Streams
+        for audio in media.media.audios {
+            println!("Processing audio index {}", audio.index);
+            process_audio_stream(&orm_database, file_id, audio).await?;
+        }
+
+        // Subtitle streams
+        for sub in media.media.subtitles {
+            process_subtitle_stream(&orm_database, file_id, sub).await?;
+        }
+
+        for subtitle in media.subtitles {
+            println!("Processing {}", subtitle.path.display());
+            let sub_file_id = process_file(&orm_database, directory_id, &subtitle.path, hasher).await?;
+            let _ = process_subtitle_file(&orm_database, sub_file_id, media_id).await?;
+            for sub in subtitle.subtitles {
+                let _ = process_subtitle_stream(&orm_database, sub_file_id, sub).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let config = AppConfig::new()
+        .context("failed to load application configuration")?;
+
+    let orm_database = database_connect(&config.dsn)
+        .await
+        .context("failed to connect to database")?;
+
+    let path = PathBuf::from(&config.media_path);
+    process_library(path.clone(), &orm_database)
+        .await
+        .with_context(|| format!("failed processing library {}", path.display()))?;
+
+    orm_database
+        .close()
+        .await
+        .context("failed to close database connection")?;
+
+    Ok(())
+}

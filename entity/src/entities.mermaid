@@ -1,0 +1,77 @@
+erDiagram
+    audio_streams {
+        bigint id PK
+        bigint file_id FK,UK
+        bigint stream_index UK
+        varchar title
+        varchar codec
+        bigint language_id FK
+        varchar channels
+        bigint bitrate
+        bool is_default
+        bool is_forced
+    }
+    directories {
+        bigint id PK
+        varchar path UK
+        bigint parent_id FK
+    }
+    files {
+        bigint id PK
+        bigint directory_id FK,UK
+        varchar name UK
+        varchar extension
+        varchar hash
+        varchar hash_algorithm
+        bigint size_bytes
+        timestamptz created_at
+        timestamptz modified_at
+        timestamptz missing_since
+    }
+    languages {
+        bigint id PK
+        varchar iso_639_1
+        varchar iso_639_2
+        varchar name
+    }
+    media_files {
+        bigint id PK
+        bigint file_id FK,UK
+    }
+    subtitle_files {
+        bigint id PK
+        bigint file_id FK,UK
+        bigint media_file_id FK
+    }
+    subtitle_streams {
+        bigint id PK
+        bigint file_id FK,UK
+        bigint stream_index UK
+        varchar title
+        varchar codec
+        bigint language_id FK
+        bool is_default
+        bool is_forced
+        bool is_sdh
+    }
+    video_streams {
+        bigint id PK
+        bigint file_id FK,UK
+        bigint stream_index UK
+        varchar codec
+        bigint width
+        bigint height
+        bigint bit_depth
+        varchar hdr_format
+        bigint bitrate
+    }
+    audio_streams }o--|| files : "file_id"
+    audio_streams }o--|| languages : "language_id"
+    directories }o--|| directories : "parent_id"
+    files }o--|| directories : "directory_id"
+    media_files }o--|| files : "file_id"
+    subtitle_files }o--|| files : "file_id"
+    subtitle_files }o--|| media_files : "media_file_id"
+    subtitle_streams }o--|| files : "file_id"
+    subtitle_streams }o--|| languages : "language_id"
+    video_streams }o--|| files : "file_id"
