@@ -8,10 +8,11 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
-    #[sea_orm(unique_key = "uq_files_directory_id_name")]
+    #[sea_orm(unique_key = "uq_files_directory_id_name_extension")]
     pub directory_id: i64,
-    #[sea_orm(unique_key = "uq_files_directory_id_name")]
+    #[sea_orm(unique_key = "uq_files_directory_id_name_extension")]
     pub name: String,
+    #[sea_orm(unique_key = "uq_files_directory_id_name_extension")]
     pub extension: String,
     pub hash: String,
     pub hash_algorithm: String,

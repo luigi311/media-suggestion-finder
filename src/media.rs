@@ -17,6 +17,23 @@ pub enum Language {
     Portuguese,
 }
 
+impl Language {
+    pub fn iso_639_2(self) -> &'static str {
+        match self {
+            Language::English => "eng",
+            Language::Spanish => "spa",
+            Language::French => "fra",
+            Language::German => "deu",
+            Language::Chinese => "zho",
+            Language::Japanese => "jpn",
+            Language::Korean => "kor",
+            Language::Russian => "rus",
+            Language::Italian => "ita",
+            Language::Portuguese => "por",
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct VideoStream {
     pub index: i32,
@@ -119,7 +136,6 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             let subtitle_streams = media.streams(StreamKind::Text);
 
             for stream in video_streams {
-                println!("Parsing video stream");
                 let index: i32 = stream.get("StreamKindID").to_string().parse()?;
                 let codec: String = stream.get("Format").to_string();
                 let width: i32 = stream.get("Width").parse()?;
@@ -139,7 +155,6 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             }
 
             for stream in audio_streams {
-                println!("Parsing audio stream");
                 let index: i32 = stream.get("StreamKindID").to_string().parse()?;
                 let title: Option<String> = stream.get("Title").to_string().into();
                 let codec: String = stream.get("Format").to_string();
@@ -162,7 +177,6 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             }
 
             for stream in subtitle_streams {
-                println!("Parsing subtitle stream");
                 let index: i32 = stream.get("StreamKindID").to_string().parse()?;
                 let title: Option<String> = stream.get("Title").to_string().into();
                 let codec: String = stream.get("Format").to_string();

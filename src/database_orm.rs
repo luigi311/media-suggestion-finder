@@ -4,6 +4,9 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection, QueryFilter, entity:
 use std::time::Duration;
 
 use entity::{prelude::*, *};
+
+use crate::media::Language;
+
 pub async fn database_connect(dsn: &String) -> Result<DatabaseConnection> {
     let mut opt: ConnectOptions = ConnectOptions::new(dsn);
     opt.max_connections(10)
@@ -19,6 +22,15 @@ pub async fn database_connect(dsn: &String) -> Result<DatabaseConnection> {
     Ok(conn)
 }
 
+pub async fn get_language_id(conn: &DatabaseConnection, language: Language) -> Result<Option<i64>> {
+    let result = Languages::find()
+        .filter(languages::Column::Iso6392.eq(language.iso_639_2()))
+        .one(conn)
+        .await?;
+
+    Ok(result.map(|res| res.id))
+}
+
 pub async fn get_directory_id(conn: &DatabaseConnection, path: &str) -> Result<Option<i64>> {
     let result: Option<directories::Model> = Directories::find()
         .filter(directories::Column::Path.eq(path))
@@ -28,14 +40,16 @@ pub async fn get_directory_id(conn: &DatabaseConnection, path: &str) -> Result<O
     Ok(result.map(|res| res.id))
 }
 
-pub async fn get_file_primary_id_from_name(
+pub async fn get_file_primary_id_from_name_extension(
     conn: &DatabaseConnection,
     directory_id: i64,
     name: &str,
+    extension: &str,
 ) -> Result<Option<i64>> {
     let result: Option<files::Model> = Files::find()
         .filter(files::Column::DirectoryId.eq(directory_id))
         .filter(files::Column::Name.eq(name))
+        .filter(files::Column::Extension.eq(extension))
         .one(conn)
         .await?;
 

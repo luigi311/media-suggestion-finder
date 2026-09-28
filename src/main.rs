@@ -48,7 +48,9 @@ struct ParsedMedia {
 
 async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Result<()> {
     let hasher = Hasher::new();
-    let all_files = iterate_folder(path).await.unwrap();
+    let all_files = iterate_folder(path.clone())
+        .await
+        .with_context(|| format!("failed scanning {}", path.display()))?;
 
     let files = find_media_subtitle_pairs(all_files).await;
     let mut parsed: Vec<ParsedMedia> = Vec::new();
@@ -100,17 +102,15 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
     }
 
     for media in parsed {
+        println!("Processing {}", media.media.path.display());
         let parent = media
             .media
             .path
             .parent()
             .expect("Failed to get parent path");
         let directory_id = process_directory(&orm_database, parent).await?;
-        println!("directory_id: {directory_id}");
         let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher).await?;
-        println!("file_id: {file_id}");
         let media_id = process_media_file(&orm_database, file_id).await?;
-        println!("media_id: {media_id}");
 
         // Video Streams
         for video in media.media.videos {
@@ -167,12 +167,12 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
             for sub in subtitle.subtitles {
                 let sub_index = sub.index;
 
-                process_subtitle_stream(&orm_database, file_id, sub)
+                process_subtitle_stream(&orm_database, sub_file_id, sub)
                     .await
                     .with_context(|| {
                         format!(
-                            "failed processing subtitle stream {sub_index} for {} (file_id={file_id})",
-                            media.media.path.display()
+                            "failed processing subtitle stream {sub_index} for {} (file_id={sub_file_id})",
+                            subtitle.path.display()
                         )
                     })?;
             }

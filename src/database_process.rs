@@ -10,11 +10,15 @@ use sea_orm::{
 use std::path::Path;
 use tokio::fs;
 
-use crate::{database_orm, media};
+use crate::{
+    database_orm::{self, get_language_id},
+    media,
+};
 use database_orm::{
-    get_audio_stream_primary_id_from_file_stream, get_directory_id, get_file_primary_id_from_name,
-    get_media_file_primary_id_from_file_id, get_subtitle_file_primary_id_from_file_id,
-    get_subtitle_stream_primary_id_from_file_stream, get_video_stream_primary_id_from_file_stream,
+    get_audio_stream_primary_id_from_file_stream, get_directory_id,
+    get_file_primary_id_from_name_extension, get_media_file_primary_id_from_file_id,
+    get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_primary_id_from_file_stream,
+    get_video_stream_primary_id_from_file_stream,
 };
 
 use media::{AudioStream, SubtitleStream, VideoStream};
@@ -64,16 +68,22 @@ pub async fn process_file(
 ) -> Result<i64> {
     let file_path_str = file.to_str().expect("Failed to convert to str");
     let file_name = file
-        .file_name()
+        .file_stem()
         .expect("Failed to get file name")
         .to_str()
         .expect("Failed to convert to str");
 
+    let file_extension = file
+        .extension()
+        .expect("Failed to get file extension")
+        .to_string_lossy()
+        .to_lowercase();
+
     // TODO: Check via hash first, if exists, then skip, if not then fallback to path and then update info
-    let mut file_id = get_file_primary_id_from_name(database, directory_id, file_name)
+    let mut file_id = get_file_primary_id_from_name_extension(database, directory_id, file_name, file_extension.as_str())
         .await
         .with_context(|| {
-            format!("failed looking up file from directory_id={directory_id} file_name={file_name}")
+            format!("failed looking up file from directory_id={directory_id} file_name={file_name} file_extension={file_extension}")
         })?;
 
     match file_id {
@@ -202,7 +212,7 @@ pub async fn process_video_stream(
             .await
             .with_context(|| {
                 format!(
-                    "failed looking up audio stream file_id={file_id}, stream_index={video_index}"
+                    "failed looking up video stream file_id={file_id}, stream_index={video_index}"
                 )
             })?;
 
@@ -261,7 +271,16 @@ pub async fn process_audio_stream(
         // TODO: Handle updating existing audio_stream
         Some(_) => {}
         None => {
-            let audio_lang: Option<i64> = audio.language.map(|l| l as i64);
+            let audio_lang = match audio.language {
+                Some(language) => get_language_id(database, language).await.with_context(|| {
+                    format!(
+                        "failed looking up language {:?} for audio stream \
+                             file_id={file_id}, stream_index={audio_index}",
+                        language
+                    )
+                })?,
+                None => None,
+            };
             let stream: audio_streams::ActiveModel = audio_streams::ActiveModel {
                 file_id: Set(file_id),
                 stream_index: Set(audio.index.into()),
@@ -313,7 +332,16 @@ pub async fn process_subtitle_stream(
         // TODO: Handle updating existing subtitle_streams
         Some(_) => {}
         None => {
-            let sub_lang: Option<i64> = subtitle.language.map(|l| l as i64);
+            let sub_lang = match subtitle.language {
+                Some(language) => get_language_id(database, language).await.with_context(|| {
+                    format!(
+                        "failed looking up language {:?} for audio stream \
+                             file_id={file_id}, stream_index={sub_index}",
+                        language
+                    )
+                })?,
+                None => None,
+            };
             let stream: subtitle_streams::ActiveModel = subtitle_streams::ActiveModel {
                 file_id: Set(file_id),
                 stream_index: Set(subtitle.index.into()),

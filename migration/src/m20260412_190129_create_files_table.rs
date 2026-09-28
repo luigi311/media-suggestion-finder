@@ -35,11 +35,12 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("uq_files_directory_id_name")
+                    .name("uq_files_directory_id_name_extension")
                     .if_not_exists()
                     .table("files")
                     .col("directory_id")
                     .col("name")
+                    .col("extension")
                     .unique()
                     .to_owned(),
             )
@@ -74,7 +75,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_index(
                 Index::drop()
-                    .name("uq_files_directory_id_name")
+                    .name("uq_files_directory_id_name_extension")
                     .if_exists()
                     .table("files")
                     .to_owned(),
