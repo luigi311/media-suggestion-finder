@@ -10,11 +10,13 @@ mod database_process;
 mod files;
 mod media;
 
-use database_orm::database_connect;
+use database_orm::{
+    database_connect, get_directories_with_media_files, get_metadata_from_directory,
+};
 use files::{find_media_subtitle_pairs, iterate_folder};
 use media::{Media, parse_media};
 
-use crate::database_process::{
+use database_process::{
     process_audio_stream, process_directory, process_file, process_media_file,
     process_subtitle_file, process_subtitle_stream, process_video_stream,
 };
@@ -215,6 +217,15 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("failed processing library {}", path.display()))?;
 
+    let directories_ids = get_directories_with_media_files(&orm_database)
+        .await
+        .with_context(|| format!("failed fetching directories with media files"))?;
+
+    for dir_id in directories_ids {
+        let metadata = get_metadata_from_directory(&orm_database, dir_id)
+            .await
+            .with_context(|| format!("failed fetching media metadata for directory id {dir_id}"))?;
+    }
     orm_database
         .close()
         .await
