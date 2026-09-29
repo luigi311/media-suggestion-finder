@@ -83,61 +83,62 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
         }
 
         // AI media <-> subtitling magic
-        let mut media_with_stems: Vec<(String, PathBuf)> = directory
-            .media_files
-            .into_iter()
-            .filter_map(|p| {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| (s.to_string(), p.clone()))
-            })
-            .collect();
+        {
+            let mut media_with_stems: Vec<(String, PathBuf)> = directory
+                .media_files
+                .into_iter()
+                .filter_map(|p| {
+                    p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|s| (s.to_string(), p.clone()))
+                })
+                .collect();
 
-        // Longest stem first so more-specific media wins when one stem
-        // is a prefix of another.
-        media_with_stems.sort_by_key(|(stem, _)| std::cmp::Reverse(stem.len()));
+            // Longest stem first so more-specific media wins when one stem
+            // is a prefix of another.
+            media_with_stems.sort_by_key(|(stem, _)| std::cmp::Reverse(stem.len()));
 
-        // Track which media each entry belongs to.
-        let mut buckets: Vec<(PathBuf, Vec<PathBuf>)> = media_with_stems
-            .iter()
-            .map(|(_, path)| (path.clone(), Vec::new()))
-            .collect();
+            // Track which media each entry belongs to.
+            let mut buckets: Vec<(PathBuf, Vec<PathBuf>)> = media_with_stems
+                .iter()
+                .map(|(_, path)| (path.clone(), Vec::new()))
+                .collect();
 
-        let mut unmatched_subs: Vec<PathBuf> = Vec::new();
+            let mut unmatched_subs: Vec<PathBuf> = Vec::new();
 
-        'subs: for sub_path in directory.subtitle_files {
-            let Some(sub_stem) = sub_path.file_stem().and_then(|s| s.to_str()) else {
-                unmatched_subs.push(sub_path);
-                continue;
-            };
+            'subs: for sub_path in directory.subtitle_files {
+                let Some(sub_stem) = sub_path.file_stem().and_then(|s| s.to_str()) else {
+                    unmatched_subs.push(sub_path);
+                    continue;
+                };
 
-            for (i, (media_stem, _)) in media_with_stems.iter().enumerate() {
-                if sub_stem == media_stem
-                    || sub_stem
-                        .strip_prefix(media_stem.as_str())
-                        .map_or(false, |rest| rest.starts_with('.'))
-                {
-                    buckets[i].1.push(sub_path);
-                    continue 'subs;
+                for (i, (media_stem, _)) in media_with_stems.iter().enumerate() {
+                    if sub_stem == media_stem
+                        || sub_stem
+                            .strip_prefix(media_stem.as_str())
+                            .map_or(false, |rest| rest.starts_with('.'))
+                    {
+                        buckets[i].1.push(sub_path);
+                        continue 'subs;
+                    }
                 }
+                unmatched_subs.push(sub_path);
             }
-            unmatched_subs.push(sub_path);
-        }
 
-        for (media, subtitles) in buckets {
+
+
+            for (media, subtitles) in buckets {
+                pairs.push(MediaPair {
+                    media: Some(media),
+                    subtitles,
+                });
+            }
             pairs.push(MediaPair {
-                media: Some(media),
-                subtitles,
+                media: None,
+                subtitles: unmatched_subs,
             });
         }
-        pairs.push(MediaPair {
-            media: None,
-            subtitles: unmatched_subs,
-        });
     }
 
-    for pair in &pairs {
-        println!("{:?}", pair);
-    }
     pairs
 }
