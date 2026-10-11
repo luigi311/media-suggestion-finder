@@ -10,18 +10,13 @@ use sea_orm::{
 use std::path::Path;
 use tokio::fs;
 
-use crate::{
-    database_orm::{self, get_language_id},
-    media,
-};
-use database_orm::{
+use crate::database_orm::{
     get_audio_stream_primary_id_from_file_stream, get_directory_id,
-    get_file_primary_id_from_name_extension, get_media_file_primary_id_from_file_id,
-    get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_primary_id_from_file_stream,
-    get_video_stream_primary_id_from_file_stream,
+    get_file_primary_id_from_name_extension, get_language_id,
+    get_media_file_primary_id_from_file_id, get_subtitle_file_primary_id_from_file_id,
+    get_subtitle_stream_primary_id_from_file_stream, get_video_stream_primary_id_from_file_stream,
 };
-
-use media::{AudioStream, SubtitleStream, VideoStream};
+use crate::media::{AudioStream, SubtitleStream, VideoStream};
 
 pub async fn process_directory(database: &DatabaseConnection, directory: &Path) -> Result<i64> {
     let dir_str = directory.to_str().expect("Failed to convert to str");

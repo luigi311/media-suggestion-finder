@@ -125,8 +125,6 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
                 unmatched_subs.push(sub_path);
             }
 
-
-
             for (media, subtitles) in buckets {
                 pairs.push(MediaPair {
                     media: Some(media),

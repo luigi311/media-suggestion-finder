@@ -13,6 +13,7 @@ members = [
 [dependencies]
 anyhow = "1.0.104"
 async-recursion = "1.1.1"
+axum = "0.8.9"
 chrono = "0.4.44"
 config = "0.15.22"
 entity = { path = "entity" }
@@ -20,4 +21,5 @@ imohash = "0.1.2"
 mediainfo-rust = "0.1.0"
 migration = { path = "migration" }
 sea-orm = { version = "2.0", features = ["sqlx-sqlite", "runtime-tokio", "with-chrono"] }
+serde = "1.0.229"
 tokio = { version = "1.51", features = ["full"] }
