@@ -8,7 +8,11 @@ use tokio::fs;
 use tokio::time::{Duration, sleep};
 
 use crate::AppConfig;
-use crate::database_orm::{MediaMetadata, database_connect, get_all_metadata};
+use crate::comparison::{MediaOutlier, SiblingAnalysis, analyse_siblings, generate_outliers};
+use crate::database_orm::{
+    MediaMetadata, database_connect, get_all_metadata, get_directories_with_media_files,
+    get_metadata_from_directory,
+};
 
 pub async fn webserver(config: &AppConfig) -> Result<()> {
     // Wait for database to exist first
@@ -28,7 +32,9 @@ pub async fn webserver(config: &AppConfig) -> Result<()> {
 
     // build our application with a route
     let app = Router::new()
+        .route("/", get(comparison))
         .route("/metadata", get(metadata))
+        .route("/all", get(siblings))
         .with_state(orm_database);
 
     // run our app with hyper, listening globally on port 3000
@@ -47,4 +53,52 @@ async fn metadata(
     })?;
 
     Ok(Json(metadata))
+}
+
+async fn siblings(
+    State(orm_database): State<DatabaseConnection>,
+) -> Result<Json<SiblingAnalysis>, StatusCode> {
+    let metadata = get_all_metadata(&orm_database).await.map_err(|e| {
+        eprintln!("Failed fetching media metadata: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let analysis = analyse_siblings(metadata).await.map_err(|e| {
+        eprintln!("Failed analysing sibling metadata: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(analysis))
+}
+
+async fn comparison(
+    State(orm_database): State<DatabaseConnection>,
+) -> Result<Json<Vec<MediaOutlier>>, StatusCode> {
+    let directories_ids = get_directories_with_media_files(&orm_database)
+        .await
+        .map_err(|e| {
+            eprintln!("failed fetching directories with media files: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let mut outliers: Vec<MediaOutlier> = Vec::new();
+    println!("{:?}", directories_ids);
+    for dir_id in directories_ids {
+        let metadata = get_metadata_from_directory(&orm_database, dir_id)
+            .await
+            .map_err(|e| {
+                eprintln!("failed fetching media metadata for directory id {dir_id}: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        let analysis = generate_outliers(metadata).await.map_err(|e| {
+            eprintln!("failed to generate outliers for directory id {dir_id}: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        println!("{:?}", analysis);
+        outliers.extend(analysis);
+    }
+
+    Ok(Json(outliers))
 }

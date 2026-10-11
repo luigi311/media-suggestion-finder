@@ -113,7 +113,7 @@ fn str_to_bool(s: &str) -> Result<bool> {
     }
 }
 
-fn print_fields(stream: &Stream) -> () {
+fn _print_fields(stream: &Stream) -> () {
     for (n, t, _, _) in stream.fields() {
         println!("{n}: {t}");
     }

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use config::{Config, ConfigError, File};
 
+mod comparison;
 mod database_orm;
 mod database_process;
 mod files;
