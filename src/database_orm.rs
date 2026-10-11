@@ -140,6 +140,7 @@ pub async fn get_subtitle_stream_primary_id_from_file_stream(
 pub async fn get_directories_with_media_files(conn: &DatabaseConnection) -> Result<Vec<i64>> {
     let result: Vec<i64> = MediaFiles::find()
         .select_only()
+        .distinct()
         .column(files::Column::DirectoryId)
         .inner_join(files::Entity)
         .into_tuple()
