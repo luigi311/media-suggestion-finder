@@ -9,7 +9,6 @@ const SUBTITLE_EXTENSIONS: [&str; 5] = ["srt", "ass", "ssa", "vtt", "sub"];
 
 #[derive(Clone, Debug)]
 pub struct DirectoryScan {
-    pub path: PathBuf,
     pub media_files: Vec<PathBuf>,
     pub subtitle_files: Vec<PathBuf>,
 }
@@ -50,7 +49,6 @@ pub async fn iterate_folder(path: PathBuf) -> Result<Vec<DirectoryScan>> {
 
     if !media_files.is_empty() || !subtitle_files.is_empty() {
         results.push(DirectoryScan {
-            path,
             media_files,
             subtitle_files,
         });
@@ -139,4 +137,123 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
     }
 
     pairs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // With no scanned directories, there should be no output pairs.
+    #[tokio::test]
+    async fn empty_input_returns_no_pairs() {
+        let pairs = find_media_subtitle_pairs(Vec::new()).await;
+
+        assert!(pairs.is_empty());
+    }
+
+    // Keep every video or audio file in the results, even when it has no subtitles.
+    #[tokio::test]
+    async fn media_without_subtitles_get_separate_pairs() {
+        let directory = DirectoryScan {
+            media_files: vec!["movie.mkv".into(), "song.flac".into()],
+            subtitle_files: vec![],
+        };
+
+        let pairs = find_media_subtitle_pairs(vec![directory]).await;
+
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].media, Some("movie.mkv".into()));
+        assert!(pairs[0].subtitles.is_empty());
+        assert_eq!(pairs[1].media, Some("song.flac".into()));
+        assert!(pairs[1].subtitles.is_empty());
+    }
+
+    // Group a directory's subtitles under media: None when no media file exists.
+    #[tokio::test]
+    async fn subtitles_without_media_stay_together() {
+        let directory = DirectoryScan {
+            media_files: vec![],
+            subtitle_files: vec!["movie.srt".into(), "movie.en.ass".into()],
+        };
+
+        let pairs = find_media_subtitle_pairs(vec![directory]).await;
+
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].media, None);
+        assert_eq!(
+            pairs[0].subtitles,
+            vec![PathBuf::from("movie.srt"), PathBuf::from("movie.en.ass")]
+        );
+    }
+
+    // Attach movie.part2.en.srt to movie.part2, even though movie also matches its prefix.
+    #[tokio::test]
+    async fn prefers_the_longest_matching_media_name() {
+        let directory = DirectoryScan {
+            media_files: vec!["movie.mkv".into(), "movie.part2.mkv".into()],
+            subtitle_files: vec!["movie.en.srt".into(), "movie.part2.en.srt".into()],
+        };
+
+        let pairs = find_media_subtitle_pairs(vec![directory]).await;
+
+        assert_eq!(pairs[0].media, Some("movie.part2.mkv".into()));
+        assert_eq!(
+            pairs[0].subtitles,
+            vec![PathBuf::from("movie.part2.en.srt")]
+        );
+        assert_eq!(pairs[1].media, Some("movie.mkv".into()));
+        assert_eq!(pairs[1].subtitles, vec![PathBuf::from("movie.en.srt")]);
+    }
+
+    // Only a dot can introduce a matching suffix; movie2, movie-extra, and other stay unmatched.
+    #[tokio::test]
+    async fn unmatched_subtitles_stay_separate_and_suffixes_require_a_dot() {
+        let directory = DirectoryScan {
+            media_files: vec!["movie.mkv".into()],
+            subtitle_files: vec![
+                "movie.en.srt".into(),
+                "movie2.srt".into(),
+                "movie-extra.srt".into(),
+                "other.srt".into(),
+            ],
+        };
+
+        let pairs = find_media_subtitle_pairs(vec![directory]).await;
+
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].media, Some("movie.mkv".into()));
+        assert_eq!(pairs[0].subtitles, vec![PathBuf::from("movie.en.srt")]);
+        assert_eq!(pairs[1].media, None);
+        assert_eq!(
+            pairs[1].subtitles,
+            vec![
+                PathBuf::from("movie2.srt"),
+                PathBuf::from("movie-extra.srt"),
+                PathBuf::from("other.srt"),
+            ]
+        );
+    }
+
+    // Matching names in different directories must stay separate.
+    #[tokio::test]
+    async fn files_in_different_directories_are_not_paired() {
+        let directories = vec![
+            DirectoryScan {
+                media_files: vec!["first/movie.mkv".into()],
+                subtitle_files: vec![],
+            },
+            DirectoryScan {
+                media_files: vec![],
+                subtitle_files: vec!["second/movie.srt".into()],
+            },
+        ];
+
+        let pairs = find_media_subtitle_pairs(directories).await;
+
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].media, Some("first/movie.mkv".into()));
+        assert!(pairs[0].subtitles.is_empty());
+        assert_eq!(pairs[1].media, None);
+        assert_eq!(pairs[1].subtitles, vec![PathBuf::from("second/movie.srt")]);
+    }
 }
