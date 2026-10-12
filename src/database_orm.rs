@@ -191,6 +191,7 @@ pub async fn get_metadata_from_directory(
         .column(files::Column::Extension)
         .column(files::Column::SizeBytes)
         .filter(files::Column::DirectoryId.eq(directory_id))
+        .filter(files::Column::MissingSince.is_null())
         .inner_join(Directories)
         .inner_join(MediaFiles) // Only fetch media file ids
         .into_tuple()
