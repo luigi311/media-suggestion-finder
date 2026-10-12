@@ -11,7 +11,7 @@ use crate::AppConfig;
 use crate::comparison::{MediaOutlier, SiblingAnalysis, analyse_siblings, generate_outliers};
 use crate::database_orm::{
     MediaMetadata, database_connect, get_all_metadata, get_directories_with_media_files,
-    get_metadata_from_directory,
+    get_languages, get_metadata_from_directory,
 };
 
 pub async fn webserver(config: &AppConfig) -> Result<()> {
@@ -74,6 +74,11 @@ async fn siblings(
 async fn comparison(
     State(orm_database): State<DatabaseConnection>,
 ) -> Result<Json<Vec<MediaOutlier>>, StatusCode> {
+    let languages = get_languages(&orm_database).await.map_err(|e| {
+        eprintln!("failed fetching languages: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     let directories_ids = get_directories_with_media_files(&orm_database)
         .await
         .map_err(|e| {
@@ -91,7 +96,7 @@ async fn comparison(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
-        let analysis = generate_outliers(metadata).await.map_err(|e| {
+        let analysis = generate_outliers(metadata, &languages).await.map_err(|e| {
             eprintln!("failed to generate outliers for directory id {dir_id}: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;

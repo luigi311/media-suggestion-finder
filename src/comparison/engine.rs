@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use serde::Serialize;
 
@@ -20,11 +22,26 @@ pub enum OutlierReason {
     },
     Codec {
         dominant: Dominant<String>,
-        actual: String
-    }
+        actual: String,
+    },
+    MissingAudioLanguage {
+        language_id: i64,
+        language: String,
+        count: usize,
+        total: usize,
+    },
+    MissingSubtitleLanguage {
+        language_id: i64,
+        language: String,
+        count: usize,
+        total: usize,
+    },
 }
 
-pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOutlier>> {
+pub async fn generate_outliers(
+    medias: Vec<MediaMetadata>,
+    languages: &BTreeMap<i64, String>,
+) -> Result<Vec<MediaOutlier>> {
     let analysis = analyse_siblings(medias.clone()).await?;
     let res_check: bool = match &analysis.resolution {
         Some(x) => x.count != x.total,
@@ -40,8 +57,8 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
     for media in medias {
         let mut reasons = Vec::new();
 
-        if res_check {
-            for video in &media.videos {
+        for video in &media.videos {
+            if res_check {
                 if let Some(dominant) = &analysis.resolution {
                     if video.width != dominant.value.0 || video.height != dominant.value.1 {
                         reasons.push(OutlierReason::Resolution {
@@ -51,10 +68,8 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
                     }
                 }
             }
-        }
 
-        if codec_check {
-            for video in &media.videos {
+            if codec_check {
                 if let Some(dominant) = &analysis.codec {
                     if video.codec != dominant.value {
                         reasons.push(OutlierReason::Codec {
@@ -62,6 +77,58 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
                             actual: video.codec.clone(),
                         })
                     }
+                }
+            }
+        }
+
+        if let Some(dominant) = &analysis.audio_languages {
+            for language_id in &dominant.value {
+                let media_languages: Vec<i64> = media
+                    .audios
+                    .iter()
+                    .filter_map(|x| x.language_id)
+                    .map(|x| x)
+                    .collect();
+
+                let exists = media_languages.contains(language_id);
+
+                if !exists {
+                    let language: String = match languages.get(language_id) {
+                        Some(x) => x.clone(),
+                        None => "".to_string(),
+                    };
+                    reasons.push(OutlierReason::MissingAudioLanguage {
+                        language_id: *language_id,
+                        language: language,
+                        count: dominant.count[language_id],
+                        total: dominant.total,
+                    });
+                }
+            }
+        }
+
+        if let Some(dominant) = &analysis.subtitle_languages {
+            for language_id in &dominant.value {
+                let media_languages: Vec<i64> = media
+                    .subtitles
+                    .iter()
+                    .filter_map(|x| x.language_id)
+                    .map(|x| x)
+                    .collect();
+
+                let exists = media_languages.contains(language_id);
+
+                if !exists {
+                    let language: String = match languages.get(language_id) {
+                        Some(x) => x.clone(),
+                        None => "".to_string(),
+                    };
+                    reasons.push(OutlierReason::MissingSubtitleLanguage {
+                        language_id: *language_id,
+                        language: language,
+                        count: dominant.count[language_id],
+                        total: dominant.total,
+                    });
                 }
             }
         }

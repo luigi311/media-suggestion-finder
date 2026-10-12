@@ -2,7 +2,7 @@ use anyhow::Result;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection, QueryFilter, QuerySelect, entity::*};
 use serde::Serialize;
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use entity::{prelude::*, *};
 
@@ -30,6 +30,19 @@ pub async fn get_language_id(conn: &DatabaseConnection, language: Language) -> R
         .await?;
 
     Ok(result.map(|res| res.id))
+}
+pub async fn get_languages(conn: &DatabaseConnection) -> Result<BTreeMap<i64, String>> {
+    let result = Languages::find().all(conn).await?;
+
+    let mut map: BTreeMap<i64, String> = BTreeMap::new();
+
+    for res in result {
+        if let Some(name) = res.name {
+            map.insert(res.id, name);
+        }
+    }
+
+    Ok(map)
 }
 
 pub async fn get_directory_id(conn: &DatabaseConnection, path: &str) -> Result<Option<i64>> {
