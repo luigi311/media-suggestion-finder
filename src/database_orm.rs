@@ -1,6 +1,7 @@
 use anyhow::Result;
-use migration::{Migrator, MigratorTrait};
-use sea_orm::{ConnectOptions, Database, DatabaseConnection, QueryFilter, QuerySelect, entity::*};
+use chrono::Utc;
+use migration::{Expr, Migrator, MigratorTrait};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection, QueryFilter, QuerySelect, entity::*, prelude::DateTimeWithTimeZone};
 use serde::Serialize;
 use std::{collections::BTreeMap, time::Duration};
 
@@ -275,4 +276,61 @@ pub async fn get_all_metadata(conn: &DatabaseConnection) -> Result<Vec<MediaMeta
     }
 
     Ok(metadata)
+}
+
+pub async fn update_missing_files(conn: &DatabaseConnection, found: Vec<i64>) -> Result<()> {
+    let file_ids_exists: Vec<i64> = Files::find()
+        .select_only()
+        .column(files::Column::Id)
+        .filter(files::Column::MissingSince.is_null())
+        .into_tuple()
+        .all(conn)
+        .await?;
+    let file_ids_missing: Vec<i64> = Files::find()
+        .select_only()
+        .column(files::Column::Id)
+        .filter(files::Column::MissingSince.is_not_null())
+        .into_tuple()
+        .all(conn)
+        .await?;
+
+    // Previously present, but wasn't found during this scan.
+    let newly_missing: Vec<i64> = file_ids_exists
+        .into_iter()
+        .filter(|id| !found.contains(id))
+        .collect();
+
+    // Previously missing, but was found again during this scan.
+    let restored: Vec<i64> = file_ids_missing
+        .into_iter()
+        .filter(|id| found.contains(id))
+        .collect();
+
+    if !newly_missing.is_empty() {
+        println!("Newly missing {:?}", newly_missing);
+        let now: DateTimeWithTimeZone = Utc::now().into();
+
+        Files::update_many()
+            .col_expr(
+                files::Column::MissingSince,
+                Expr::value(now),
+            )
+            .filter(files::Column::Id.is_in(newly_missing))
+            .exec(conn)
+            .await?;
+    }
+
+    if !restored.is_empty() {
+        println!("Restored {:?}", restored);
+        Files::update_many()
+            .col_expr(
+                files::Column::MissingSince,
+                Expr::value(Option::<DateTimeWithTimeZone>::None),
+            )
+            .filter(files::Column::Id.is_in(restored))
+            .exec(conn)
+            .await?;
+    }
+
+    Ok(())
 }

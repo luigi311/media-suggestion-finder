@@ -7,7 +7,7 @@ use sea_orm::DatabaseConnection;
 
 use crate::AppConfig;
 use crate::database_orm::{
-    database_connect, get_directories_with_media_files, get_metadata_from_directory,
+    database_connect, update_missing_files,
 };
 use crate::database_process::{
     process_audio_stream, process_directory, process_file, process_media_file,
@@ -24,6 +24,8 @@ struct ParsedMedia {
 
 async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Result<()> {
     let hasher = Hasher::new();
+    let mut found_files: Vec<i64> = Vec::new();
+
     let all_files = iterate_folder(path.clone())
         .await
         .with_context(|| format!("failed scanning {}", path.display()))?;
@@ -90,6 +92,8 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
         let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher)
             .await
             .with_context(|| format!("failed processing file {}", media.media.path.display()))?;
+        found_files.push(file_id);
+
         let media_id = process_media_file(&orm_database, file_id)
             .await
             .with_context(|| {
@@ -174,6 +178,8 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
             }
         }
     }
+
+    update_missing_files(&orm_database, found_files).await?;
 
     Ok(())
 }
