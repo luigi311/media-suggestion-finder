@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use entity::{
     audio_streams, directories, files, media_files, subtitle_files, subtitle_streams, video_streams,
 };
-use imohash::Hasher;
 use sea_orm::{
     ActiveValue::Set, DatabaseConnection, EntityTrait, InsertResult, prelude::DateTimeWithTimeZone,
 };
@@ -61,9 +60,8 @@ pub async fn process_file(
     database: &DatabaseConnection,
     directory_id: i64,
     file: &Path,
-    hasher: Hasher,
+    hash: String,
 ) -> Result<i64> {
-    let file_path_str = file.to_str().expect("Failed to convert to str");
     let file_name = file
         .file_stem()
         .expect("Failed to get file name")
@@ -76,7 +74,6 @@ pub async fn process_file(
         .to_string_lossy()
         .to_lowercase();
 
-    // TODO: Check via hash first, if exists, then skip, if not then fallback to path and then update info
     let mut file_id = get_file_primary_id_from_name_extension(database, directory_id, file_name, file_extension.as_str())
         .await
         .with_context(|| {
@@ -100,11 +97,6 @@ pub async fn process_file(
             // TODO: Replace with jiff as chrono is soft dropped, waiting on seaorm support
             let created_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(created_at).into();
             let modified_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(modified_at).into();
-
-            let hash = hotpath::measure_block!("hash_media_file", {
-                let hash = hasher.sum_file(file_path_str);
-                hash
-            })?;
 
             let file: files::ActiveModel = files::ActiveModel {
                 directory_id: Set(directory_id),

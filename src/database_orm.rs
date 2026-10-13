@@ -79,7 +79,7 @@ pub async fn get_file_primary_id_from_name_extension(
 pub async fn get_file_primary_id_from_hash(
     conn: &DatabaseConnection,
     directory_id: i64,
-    hash: &str,
+    hash: &String,
 ) -> Result<Option<i64>> {
     let result: Option<files::Model> = Files::find()
         .filter(files::Column::DirectoryId.eq(directory_id))

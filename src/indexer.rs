@@ -6,7 +6,7 @@ use tokio::time::{Duration, sleep};
 use sea_orm::DatabaseConnection;
 
 use crate::AppConfig;
-use crate::database_orm::update_missing_files;
+use crate::database_orm::{get_file_primary_id_from_hash, update_missing_files};
 use crate::database_process::{
     process_audio_stream, process_directory, process_file, process_media_file,
     process_subtitle_file, process_subtitle_stream, process_video_stream,
@@ -16,8 +16,43 @@ use crate::media::{Media, parse_media};
 
 #[derive(Clone, Debug)]
 struct ParsedMedia {
-    media: Media,
-    subtitles: Vec<Media>,
+    // Hash, Media
+    media: (String, Media),
+    subtitles: Vec<(String, Media)>,
+}
+
+#[hotpath::measure]
+async fn parse_file(
+    orm_database: &DatabaseConnection,
+    file: &PathBuf,
+    hasher: Hasher,
+) -> Result<(Option<i64>, Option<(String, Media)>)> {
+    let parent = file
+        .parent()
+        .with_context(|| format!("Failed to get parent path"))?;
+    let directory_id = process_directory(orm_database, parent)
+        .await
+        .with_context(|| format!("failed processing directory {}", parent.display()))?;
+
+    let path = file
+        .to_str()
+        .with_context(|| format!("Failed to get path"))?;
+    let hash = hotpath::measure_block!("hash_media_file", {
+        let hash = hasher.sum_file(path);
+        hash
+    })?.to_string();
+
+    // Check if hash exists in directory_id if not parse and process
+    let parsed_media: (Option<i64>, Option<(String, Media)>) =
+        match get_file_primary_id_from_hash(orm_database, directory_id, &hash).await? {
+            Some(file_id) => (Some(file_id), None),
+            None => {
+                let parsed_file = parse_media(file).await?;
+                (None, Some((hash, parsed_file)))
+            }
+        };
+
+    Ok(parsed_media)
 }
 
 #[hotpath::measure]
@@ -33,43 +68,58 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
     let mut parsed: Vec<ParsedMedia> = Vec::new();
 
     for file in files {
-        let mut parsed_subtitles: Vec<Media> = Vec::new();
         let media_file = &file.media;
-        let parsed_media: Media = match media_file {
+        let parsed_media: (String, Media);
+        match media_file {
             None => {
                 println!("No file for {:?}, skipping", &file);
                 continue;
             }
             Some(media_file) => {
-                let file_name = media_file
-                    .file_name()
-                    .expect("Failed to get filename")
-                    .to_str()
-                    .expect("Failed to convert to string")
-                    .to_string();
-
-                let Ok(parse_media) = parse_media(media_file).await else {
-                    println!("Failed to parse {file_name}");
-                    continue;
-                };
-                parse_media
+                let parsed_file = parse_file(orm_database, media_file, hasher)
+                    .await
+                    .with_context(|| format!("failed parsing {}", media_file.display()))?;
+                match parsed_file {
+                    (None, Some(parsed)) => parsed_media = parsed,
+                    (Some(file_id), None) => {
+                        println!("File {} is already processed", media_file.display());
+                        found_files.push(file_id);
+                        continue;
+                    }
+                    (None, None) => {
+                        println!("Not sure how you got here");
+                        continue;
+                    }
+                    (Some(_), Some(_)) => {
+                        println!("Not sure how you got here");
+                        continue;
+                    }
+                }
             }
         };
 
+        let mut parsed_subtitles: Vec<(String, Media)> = Vec::new();
         let subtitle_files = &file.subtitles;
         for sub_file in subtitle_files {
-            let file_name = sub_file
-                .file_name()
-                .expect("Failed to get filename")
-                .to_str()
-                .expect("Failed to convert to string")
-                .to_string();
-
-            let Ok(parse_subtitle) = parse_media(sub_file).await else {
-                println!("Failed to parse {file_name}");
-                continue;
-            };
-            parsed_subtitles.push(parse_subtitle);
+            let parsed_file = parse_file(orm_database, sub_file, hasher).await?;
+            match parsed_file {
+                (None, Some(parsed)) => {
+                    parsed_subtitles.push(parsed);
+                }
+                (Some(file_id), None) => {
+                    println!("File {} is already processed", sub_file.display());
+                    found_files.push(file_id);
+                    continue;
+                }
+                (None, None) => {
+                    println!("Not sure how you got here");
+                    continue;
+                }
+                (Some(_), Some(_)) => {
+                    println!("Not sure how you got here");
+                    continue;
+                }
+            }
         }
 
         parsed.push(ParsedMedia {
@@ -78,19 +128,19 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
         })
     }
 
-    for media in parsed {
-        println!("Processing {}", media.media.path.display());
-        let parent = media
-            .media
-            .path
-            .parent()
-            .expect("Failed to get parent path");
+    for parse in parsed {
+        let media: Media = parse.media.1;
+        let subtitles: Vec<(String, Media)> = parse.subtitles;
+        let hash: String = parse.media.0;
+        println!("Processing {}", media.path.display());
+
+        let parent = media.path.parent().expect("Failed to get parent path");
         let directory_id = process_directory(&orm_database, parent)
             .await
             .with_context(|| format!("failed processing directory {}", parent.display()))?;
-        let file_id = process_file(&orm_database, directory_id, &media.media.path, hasher)
+        let file_id = process_file(&orm_database, directory_id, &media.path, hash)
             .await
-            .with_context(|| format!("failed processing file {}", media.media.path.display()))?;
+            .with_context(|| format!("failed processing file {}", media.path.display()))?;
         found_files.push(file_id);
 
         let media_id = process_media_file(&orm_database, file_id)
@@ -98,12 +148,12 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
             .with_context(|| {
                 format!(
                     "failed processing media file file_id={file_id} {}",
-                    media.media.path.display()
+                    media.path.display()
                 )
             })?;
 
         // Video Streams
-        for video in media.media.videos {
+        for video in media.videos {
             let video_index = video.index;
 
             process_video_stream(&orm_database, file_id, video)
@@ -111,13 +161,13 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
                 .with_context(|| {
                     format!(
                         "failed processing video stream {video_index} for {} (file_id={file_id})",
-                        media.media.path.display()
+                        media.path.display()
                     )
                 })?;
         }
 
         // Audio Streams
-        for audio in media.media.audios {
+        for audio in media.audios {
             let audio_index = audio.index;
 
             process_audio_stream(&orm_database, file_id, audio)
@@ -125,13 +175,13 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
                 .with_context(|| {
                     format!(
                         "failed processing audio stream {audio_index} for {} (file_id={file_id})",
-                        media.media.path.display()
+                        media.path.display()
                     )
                 })?;
         }
 
         // Subtitle streams
-        for sub in media.media.subtitles {
+        for sub in media.subtitles {
             let sub_index = sub.index;
 
             process_subtitle_stream(&orm_database, file_id, sub)
@@ -139,14 +189,15 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
                 .with_context(|| {
                     format!(
                         "failed processing subtitle stream {sub_index} for {} (file_id={file_id})",
-                        media.media.path.display()
+                        media.path.display()
                     )
                 })?;
         }
 
-        for subtitle in media.subtitles {
+        for (sub_hash, subtitle) in subtitles {
             println!("Processing {}", subtitle.path.display());
-            let sub_file_id = process_file(&orm_database, directory_id, &subtitle.path, hasher)
+            let hash: String = sub_hash.to_string();
+            let sub_file_id = process_file(&orm_database, directory_id, &subtitle.path, hash)
                 .await
                 .with_context(|| {
                     format!(
