@@ -18,6 +18,7 @@ use crate::database_orm::{
 };
 use crate::media::{AudioStream, SubtitleStream, VideoStream};
 
+#[hotpath::measure]
 pub async fn process_directory(database: &DatabaseConnection, directory: &Path) -> Result<i64> {
     let dir_str = directory.to_str().expect("Failed to convert to str");
     let mut directory_id: Option<i64> = get_directory_id(database, dir_str).await?;
@@ -55,6 +56,7 @@ pub async fn process_directory(database: &DatabaseConnection, directory: &Path) 
     directory_id.context("Failed to generate directory id")
 }
 
+#[hotpath::measure]
 pub async fn process_file(
     database: &DatabaseConnection,
     directory_id: i64,
@@ -99,7 +101,10 @@ pub async fn process_file(
             let created_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(created_at).into();
             let modified_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(modified_at).into();
 
-            let hash = hasher.sum_file(file_path_str)?;
+            let hash = hotpath::measure_block!("hash_media_file", {
+                let hash = hasher.sum_file(file_path_str);
+                hash
+            })?;
 
             let file: files::ActiveModel = files::ActiveModel {
                 directory_id: Set(directory_id),
@@ -130,6 +135,7 @@ pub async fn process_file(
     file_id.context("Failed to generate file id")
 }
 
+#[hotpath::measure]
 pub async fn process_media_file(database: &DatabaseConnection, file_id: i64) -> Result<i64> {
     let mut media_id = get_media_file_primary_id_from_file_id(database, file_id)
         .await
@@ -159,6 +165,7 @@ pub async fn process_media_file(database: &DatabaseConnection, file_id: i64) -> 
     media_id.context("Failed to generate media id")
 }
 
+#[hotpath::measure]
 pub async fn process_subtitle_file(
     database: &DatabaseConnection,
     file_id: i64,
@@ -195,6 +202,7 @@ pub async fn process_subtitle_file(
     subtitle_id.context("Failed to generate subtitle id")
 }
 
+#[hotpath::measure]
 pub async fn process_video_stream(
     database: &DatabaseConnection,
     file_id: i64,
@@ -246,6 +254,7 @@ pub async fn process_video_stream(
     video_stream_id.context("Failed to generate video stream id")
 }
 
+#[hotpath::measure]
 pub async fn process_audio_stream(
     database: &DatabaseConnection,
     file_id: i64,
@@ -307,6 +316,7 @@ pub async fn process_audio_stream(
     audio_stream_id.context("Failed to generate audio stream id")
 }
 
+#[hotpath::measure]
 pub async fn process_subtitle_stream(
     database: &DatabaseConnection,
     file_id: i64,

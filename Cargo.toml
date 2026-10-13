@@ -17,6 +17,7 @@ axum = "0.8.9"
 chrono = "0.4.44"
 config = "0.15.22"
 entity = { path = "entity" }
+hotpath = { version = "0.28", features = ["tokio", "sqlx", "axum-0-8"] }
 imohash = "0.1.2"
 itertools = "0.15.0"
 mediainfo-rust = "0.1.0"
@@ -24,3 +25,11 @@ migration = { path = "migration" }
 sea-orm = { version = "2.0", features = ["sqlx-sqlite", "runtime-tokio", "with-chrono"] }
 serde = "1.0.229"
 tokio = { version = "1.51", features = ["full"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"], optional = true }
+
+[features]
+default = []
+hotpath = ["hotpath/hotpath", "dep:tracing-subscriber"]
+hotpath-alloc = ["hotpath/hotpath-alloc"]
+hotpath-prometheus = ["hotpath/hotpath-prometheus"]
+hotpath-cloud = ["hotpath/hotpath-cloud"]

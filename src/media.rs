@@ -119,6 +119,7 @@ fn _print_fields(stream: &Stream) -> () {
     }
 }
 
+#[hotpath::measure]
 pub async fn parse_media(path: &PathBuf) -> Result<Media> {
     let mut media = MediaInfo::new();
 

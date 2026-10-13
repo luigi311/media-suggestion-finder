@@ -14,6 +14,7 @@ use crate::database_orm::{
     get_languages, get_metadata_from_directory,
 };
 
+#[hotpath::measure]
 pub async fn webserver(config: &AppConfig) -> Result<()> {
     // Wait for database to exist first
     loop {
@@ -36,6 +37,7 @@ pub async fn webserver(config: &AppConfig) -> Result<()> {
         .route("/metadata", get(metadata))
         .route("/all", get(siblings))
         .with_state(orm_database);
+    let app = hotpath::axum!(app);
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -44,6 +46,7 @@ pub async fn webserver(config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+#[hotpath::measure]
 async fn metadata(
     State(orm_database): State<DatabaseConnection>,
 ) -> Result<Json<Vec<MediaMetadata>>, StatusCode> {
@@ -55,6 +58,7 @@ async fn metadata(
     Ok(Json(metadata))
 }
 
+#[hotpath::measure]
 async fn siblings(
     State(orm_database): State<DatabaseConnection>,
 ) -> Result<Json<SiblingAnalysis>, StatusCode> {
@@ -71,6 +75,7 @@ async fn siblings(
     Ok(Json(analysis))
 }
 
+#[hotpath::measure]
 async fn comparison(
     State(orm_database): State<DatabaseConnection>,
 ) -> Result<Json<Vec<MediaOutlier>>, StatusCode> {

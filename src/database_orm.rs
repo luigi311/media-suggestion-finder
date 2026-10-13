@@ -1,7 +1,10 @@
 use anyhow::Result;
 use chrono::Utc;
 use migration::{Expr, Migrator, MigratorTrait};
-use sea_orm::{ConnectOptions, Database, DatabaseConnection, QueryFilter, QuerySelect, entity::*, prelude::DateTimeWithTimeZone};
+use sea_orm::{
+    ConnectOptions, Database, DatabaseConnection, QueryFilter, QuerySelect, entity::*,
+    prelude::DateTimeWithTimeZone,
+};
 use serde::Serialize;
 use std::{collections::BTreeMap, time::Duration};
 
@@ -9,6 +12,7 @@ use entity::{prelude::*, *};
 
 use crate::media::Language;
 
+#[hotpath::measure]
 pub async fn database_connect(dsn: &String) -> Result<DatabaseConnection> {
     let mut opt: ConnectOptions = ConnectOptions::new(dsn);
     opt.max_connections(10)
@@ -17,7 +21,7 @@ pub async fn database_connect(dsn: &String) -> Result<DatabaseConnection> {
         .acquire_timeout(Duration::from_secs(8))
         .idle_timeout(Duration::from_secs(8))
         .max_lifetime(Duration::from_secs(8))
-        .sqlx_logging(false); // disable SQLx logging
+        .sqlx_logging(cfg!(feature = "hotpath")); // SQL events are needed only while profiling.
 
     let conn: DatabaseConnection = Database::connect(opt).await?;
     Migrator::up(&conn, None).await?;
@@ -32,6 +36,7 @@ pub async fn get_language_id(conn: &DatabaseConnection, language: Language) -> R
 
     Ok(result.map(|res| res.id))
 }
+#[hotpath::measure]
 pub async fn get_languages(conn: &DatabaseConnection) -> Result<BTreeMap<i64, String>> {
     let result = Languages::find().all(conn).await?;
 
@@ -151,6 +156,7 @@ pub async fn get_subtitle_stream_primary_id_from_file_stream(
     Ok(result.map(|res| res.id))
 }
 
+#[hotpath::measure]
 pub async fn get_directories_with_media_files(conn: &DatabaseConnection) -> Result<Vec<i64>> {
     let result: Vec<i64> = MediaFiles::find()
         .select_only()
@@ -178,6 +184,7 @@ pub struct MediaMetadata {
     pub subtitles: Vec<subtitle_streams::Model>,
 }
 
+#[hotpath::measure]
 pub async fn get_metadata_from_directory(
     conn: &DatabaseConnection,
     directory_id: i64,
@@ -231,6 +238,7 @@ pub async fn get_metadata_from_directory(
     Ok(metadata)
 }
 
+#[hotpath::measure]
 pub async fn get_all_metadata(conn: &DatabaseConnection) -> Result<Vec<MediaMetadata>> {
     let file_ids: Vec<(i64, i64, String, String, String, i64)> = Files::find()
         .select_only()
@@ -279,6 +287,7 @@ pub async fn get_all_metadata(conn: &DatabaseConnection) -> Result<Vec<MediaMeta
     Ok(metadata)
 }
 
+#[hotpath::measure]
 pub async fn update_missing_files(conn: &DatabaseConnection, found: Vec<i64>) -> Result<()> {
     let file_ids_exists: Vec<i64> = Files::find()
         .select_only()
@@ -312,10 +321,7 @@ pub async fn update_missing_files(conn: &DatabaseConnection, found: Vec<i64>) ->
         let now: DateTimeWithTimeZone = Utc::now().into();
 
         Files::update_many()
-            .col_expr(
-                files::Column::MissingSince,
-                Expr::value(now),
-            )
+            .col_expr(files::Column::MissingSince, Expr::value(now))
             .filter(files::Column::Id.is_in(newly_missing))
             .exec(conn)
             .await?;

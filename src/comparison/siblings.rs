@@ -77,6 +77,7 @@ where
     })
 }
 
+#[hotpath::measure]
 pub async fn analyse_siblings(siblings: Vec<MediaMetadata>) -> Result<SiblingAnalysis> {
     let mut resolutions: Vec<(i64, i64)> = Vec::new();
     let mut video_codecs: Vec<String> = Vec::new();

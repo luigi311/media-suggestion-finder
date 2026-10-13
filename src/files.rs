@@ -19,6 +19,7 @@ pub struct MediaPair {
     pub subtitles: Vec<PathBuf>,
 }
 
+#[hotpath::measure]
 #[async_recursion]
 pub async fn iterate_folder(path: PathBuf) -> Result<Vec<DirectoryScan>> {
     let mut results: Vec<DirectoryScan> = Vec::new();
@@ -58,6 +59,7 @@ pub async fn iterate_folder(path: PathBuf) -> Result<Vec<DirectoryScan>> {
     Ok(results)
 }
 
+#[hotpath::measure]
 pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPair> {
     let mut pairs: Vec<MediaPair> = Vec::new();
 

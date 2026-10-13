@@ -38,6 +38,7 @@ pub enum OutlierReason {
     },
 }
 
+#[hotpath::measure]
 pub async fn generate_outliers(
     medias: Vec<MediaMetadata>,
     languages: &BTreeMap<i64, String>,
