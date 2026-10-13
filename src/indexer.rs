@@ -107,7 +107,6 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
                     parsed_subtitles.push(parsed);
                 }
                 (Some(file_id), None) => {
-                    println!("File {} is already processed", sub_file.display());
                     found_files.push(file_id);
                     continue;
                 }

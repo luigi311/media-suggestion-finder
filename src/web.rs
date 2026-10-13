@@ -80,7 +80,6 @@ async fn comparison(
         })?;
 
     let mut outliers: Vec<MediaOutlier> = Vec::new();
-    println!("{:?}", directories_ids);
     for dir_id in directories_ids {
         let metadata = get_metadata_from_directory(&orm_database, dir_id)
             .await
@@ -94,7 +93,6 @@ async fn comparison(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-        println!("{:?}", analysis);
         outliers.extend(analysis);
     }
 
