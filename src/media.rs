@@ -77,7 +77,7 @@ pub struct Media {
 
 fn parse_language(language_str: &str) -> Result<Option<Language>> {
     let language: Option<Language> = match language_str.trim().to_lowercase().as_str() {
-        "english" | "en" => Some(Language::English),
+        "english" | "en" | "en-us" => Some(Language::English),
         "french" | "fr" | "fr-fr" => Some(Language::French),
         "german" | "de" => Some(Language::German),
         "japanese" | "ja" => Some(Language::Japanese),
@@ -153,6 +153,7 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             }
 
             for stream in audio_streams {
+                _print_fields(stream);
                 let index: i32 = stream.get("StreamKindID").to_string().parse()?;
                 let title: Option<String> = stream.get("Title").to_string().into();
                 let codec: String = stream.get("Format").to_string();
