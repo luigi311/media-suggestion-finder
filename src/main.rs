@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
         indexing(config.clone()),
         label = "indexing_worker"
     ));
-    let _ = webserver(&config).await;
+    webserver(&config).await?;
 
     Ok(())
 }
