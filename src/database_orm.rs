@@ -24,7 +24,9 @@ pub async fn database_connect(dsn: &String, migrate: bool) -> Result<DatabaseCon
         .sqlx_logging(cfg!(feature = "hotpath")); // SQL events are needed only while profiling.
 
     let conn: DatabaseConnection = Database::connect(opt).await?;
-    if migrate {Migrator::up(&conn, None).await?};
+    if migrate {
+        Migrator::up(&conn, None).await?
+    };
     Ok(conn)
 }
 
@@ -236,6 +238,60 @@ pub async fn get_metadata_from_directory(
     }
 
     Ok(metadata)
+}
+
+#[hotpath::measure]
+pub async fn get_file_metadata(
+    conn: &DatabaseConnection,
+    file_id: i64,
+) -> Result<Option<MediaMetadata>> {
+    let file_ids: Option<(i64, i64, String, String, String, i64)> = Files::find()
+        .select_only()
+        .column(files::Column::Id)
+        .column(files::Column::DirectoryId)
+        .column(directories::Column::Path)
+        .column(files::Column::Name)
+        .column(files::Column::Extension)
+        .column(files::Column::SizeBytes)
+        .filter(files::Column::Id.eq(file_id))
+        .filter(files::Column::MissingSince.is_null())
+        .inner_join(Directories)
+        .inner_join(MediaFiles) // Only fetch media file ids
+        .into_tuple()
+        .one(conn)
+        .await?;
+
+    match file_ids {
+        Some(file) => {
+            let v_streams: Vec<video_streams::Model> = VideoStreams::find()
+                .filter(video_streams::Column::FileId.eq(file.0))
+                .all(conn)
+                .await?;
+
+            let a_streams: Vec<audio_streams::Model> = AudioStreams::find()
+                .filter(audio_streams::Column::FileId.eq(file.0))
+                .all(conn)
+                .await?;
+
+            let s_streams: Vec<subtitle_streams::Model> = SubtitleStreams::find()
+                .filter(subtitle_streams::Column::FileId.eq(file.0))
+                .all(conn)
+                .await?;
+
+            Ok(Some(MediaMetadata {
+                file_id: file.0,
+                directory_id: file.1,
+                directory: file.2,
+                name: file.3,
+                extension: file.4,
+                size: file.5,
+                videos: v_streams,
+                audios: a_streams,
+                subtitles: s_streams,
+            }))
+        }
+        None => Ok(None),
+    }
 }
 
 #[hotpath::measure]

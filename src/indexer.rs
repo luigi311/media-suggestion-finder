@@ -40,7 +40,8 @@ async fn parse_file(
     let hash = hotpath::measure_block!("hash_media_file", {
         let hash = hasher.sum_file(path);
         hash
-    })?.to_string();
+    })?
+    .to_string();
 
     // Check if hash exists in directory_id if not parse and process
     let parsed_media: (Option<i64>, Option<(String, Media)>) =
