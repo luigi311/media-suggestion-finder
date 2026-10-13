@@ -11,6 +11,7 @@ mod indexer;
 mod media;
 mod web;
 
+use crate::database_orm::database_connect;
 use crate::indexer::indexing;
 use crate::web::webserver;
 
@@ -51,8 +52,14 @@ async fn main() -> Result<()> {
 
     let config = AppConfig::new().context("failed to load application configuration")?;
 
+    // Generate rw database connection so migrations happen first
+    let dsn_rw = format!("sqlite://{}?mode=rwc", config.database_path);
+    let orm_database = database_connect(&dsn_rw, true)
+        .await
+        .context("failed to connect to database")?;
+
     tokio::spawn(hotpath::future!(
-        indexing(config.clone()),
+        indexing(config.clone(), orm_database),
         label = "indexing_worker"
     ));
     webserver(&config).await?;

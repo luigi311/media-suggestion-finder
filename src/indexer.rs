@@ -6,7 +6,7 @@ use tokio::time::{Duration, sleep};
 use sea_orm::DatabaseConnection;
 
 use crate::AppConfig;
-use crate::database_orm::{database_connect, update_missing_files};
+use crate::database_orm::update_missing_files;
 use crate::database_process::{
     process_audio_stream, process_directory, process_file, process_media_file,
     process_subtitle_file, process_subtitle_stream, process_video_stream,
@@ -184,11 +184,7 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
 }
 
 #[hotpath::measure]
-pub async fn indexing(config: AppConfig) -> Result<()> {
-    let dsn_rw = format!("sqlite://{}?mode=rwc", config.database_path);
-    let orm_database = database_connect(&dsn_rw)
-        .await
-        .context("failed to connect to database")?;
+pub async fn indexing(config: AppConfig, orm_database: DatabaseConnection) -> Result<()> {
     let path = PathBuf::from(&config.media_path);
 
     loop {

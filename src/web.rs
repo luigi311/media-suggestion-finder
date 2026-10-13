@@ -4,8 +4,6 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::{Router, routing::get};
 use sea_orm::DatabaseConnection;
-use tokio::fs;
-use tokio::time::{Duration, sleep};
 
 use crate::AppConfig;
 use crate::comparison::{MediaOutlier, SiblingAnalysis, analyse_siblings, generate_outliers};
@@ -16,18 +14,8 @@ use crate::database_orm::{
 
 #[hotpath::measure]
 pub async fn webserver(config: &AppConfig) -> Result<()> {
-    // Wait for database to exist first
-    loop {
-        match fs::try_exists(&config.database_path).await {
-            Ok(true) => break,
-            Ok(false) => sleep(Duration::from_secs(3)),
-            Err(e) => sleep(Duration::from_secs(3)),
-        }
-        .await
-    }
-
     let dsn_ro = format!("sqlite://{}?mode=ro", &config.database_path);
-    let orm_database = database_connect(&dsn_ro)
+    let orm_database = database_connect(&dsn_ro, false)
         .await
         .context("failed to connect to database")?;
 

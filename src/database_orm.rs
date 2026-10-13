@@ -13,7 +13,7 @@ use entity::{prelude::*, *};
 use crate::media::Language;
 
 #[hotpath::measure]
-pub async fn database_connect(dsn: &String) -> Result<DatabaseConnection> {
+pub async fn database_connect(dsn: &String, migrate: bool) -> Result<DatabaseConnection> {
     let mut opt: ConnectOptions = ConnectOptions::new(dsn);
     opt.max_connections(10)
         .min_connections(5)
@@ -24,7 +24,7 @@ pub async fn database_connect(dsn: &String) -> Result<DatabaseConnection> {
         .sqlx_logging(cfg!(feature = "hotpath")); // SQL events are needed only while profiling.
 
     let conn: DatabaseConnection = Database::connect(opt).await?;
-    Migrator::up(&conn, None).await?;
+    if migrate {Migrator::up(&conn, None).await?};
     Ok(conn)
 }
 
