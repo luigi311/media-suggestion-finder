@@ -48,7 +48,13 @@ async fn parse_file(
         match get_file_primary_id_from_hash(orm_database, directory_id, &hash).await? {
             Some(file_id) => (Some(file_id), None),
             None => {
-                let parsed_file = parse_media(file).await?;
+                let parsed_file = match parse_media(file).await {
+                    Ok(media) => media,
+                    Err(error) => {
+                        eprintln!("Skipping {}: {error:#}", file.display());
+                        return Ok((None, None));
+                    }
+                };
                 (None, Some((hash, parsed_file)))
             }
         };

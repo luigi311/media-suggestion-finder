@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow};
 use mediainfo::{self, MediaInfo, Stream, StreamKind};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -127,9 +126,7 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
     let mut audios: Vec<AudioStream> = Vec::new();
     let mut subtitles: Vec<SubtitleStream> = Vec::new();
 
-    // AI: force catch media open panics instead of propegating upwards due to MediaInfo.open not returning a result and instead force panicing
-    let opened = catch_unwind(AssertUnwindSafe(|| media.open(&path)));
-    match opened {
+    match media.try_open(&path) {
         Ok(true) => {
             println!("Parsing: {}", path.display());
             let video_streams = media.streams(StreamKind::Video);
@@ -203,20 +200,11 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             println!("MediaInfo couldnt open {}", path.display());
         }
 
-        // MediaInfo itself panicked while parsing the file.
-        Err(payload) => {
-            let message = if let Some(s) = payload.downcast_ref::<&str>() {
-                *s
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.as_str()
-            } else {
-                "unknown panic"
-            };
-
+        Err(error) => {
             return Err(anyhow!(
-                "MediaInfo panicked while parsing {}: {}",
+                "MediaInfo failed to analyse {}: {}",
                 path.display(),
-                message
+                error
             ));
         }
     }

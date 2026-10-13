@@ -20,7 +20,8 @@ entity = { path = "entity" }
 hotpath = { version = "0.28", features = ["tokio", "sqlx", "axum-0-8"] }
 imohash = "0.1.2"
 itertools = "0.15.0"
-mediainfo-rust = "0.1.0"
+# Downstream mediainfo-rust with some fixes, can revert if issues #1, #2 are fixed upstream
+mediainfo-rust = { git = "https://github.com/luigi311/mediainfo-rust", branch = "downstream" }
 migration = { path = "migration" }
 sea-orm = { version = "2.0", features = ["sqlx-sqlite", "runtime-tokio", "with-chrono"] }
 serde = "1.0.229"
