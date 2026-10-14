@@ -245,7 +245,8 @@ pub async fn indexing(config: AppConfig, orm_database: DatabaseConnection) -> Re
     let path = PathBuf::from(&config.media_path);
 
     loop {
-        process_library(path.clone(), &orm_database)
+        // Box::pin required due to async future size growing like crazy especially when utilizing hotpath
+        Box::pin(process_library(path.clone(), &orm_database))
             .await
             .with_context(|| format!("failed processing library {}", path.display()))?;
 

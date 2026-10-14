@@ -11,9 +11,9 @@ use tokio::fs;
 
 use crate::database_orm::{
     get_audio_stream_primary_id_from_file_stream, get_directory_id,
-    get_file_primary_id_from_name_extension,
-    get_media_file_primary_id_from_file_id, get_subtitle_file_primary_id_from_file_id,
-    get_subtitle_stream_primary_id_from_file_stream, get_video_stream_primary_id_from_file_stream,
+    get_file_primary_id_from_name_extension, get_media_file_primary_id_from_file_id,
+    get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_primary_id_from_file_stream,
+    get_video_stream_primary_id_from_file_stream,
 };
 use crate::media::{AudioStream, SubtitleStream, VideoStream};
 

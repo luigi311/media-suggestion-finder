@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
+use isolang::Language;
 use mediainfo::{self, MediaInfo, Stream, StreamKind};
 use std::path::PathBuf;
-use isolang::Language;
 
 #[derive(Clone, Debug)]
 pub struct VideoStream {
@@ -47,16 +47,11 @@ pub struct Media {
 
 fn parse_language(language_str: &str) -> Result<Option<String>> {
     // Split to handle language strings such as en-US
-    let trimmed = language_str
-            .split('-')
-            .next()
-            .unwrap_or(language_str);
+    let trimmed = language_str.split('-').next().unwrap_or(language_str);
 
     let lang: Option<Language> = Language::from_639_1(trimmed);
     let language: Option<String> = match lang {
-        Some(lang) => {
-            Some(lang.to_639_3().to_string())
-        },
+        Some(lang) => Some(lang.to_639_3().to_string()),
         None => {
             println!("{}", trimmed);
             None

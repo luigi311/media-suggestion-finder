@@ -36,9 +36,7 @@ pub enum OutlierReason {
 }
 
 #[hotpath::measure]
-pub async fn generate_outliers(
-    medias: Vec<MediaMetadata>,
-) -> Result<Vec<MediaOutlier>> {
+pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOutlier>> {
     let analysis = analyse_siblings(medias.clone()).await?;
     let res_check: bool = match &analysis.resolution {
         Some(x) => x.count != x.total,
