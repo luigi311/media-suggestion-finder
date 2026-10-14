@@ -16,11 +16,11 @@ pub struct MediaOutlier {
 
 #[derive(Clone, Debug, Serialize)]
 pub enum OutlierReason {
-    Resolution {
+    VideoResolution {
         dominant: Dominant<(i64, i64)>,
         actual: (i64, i64),
     },
-    Codec {
+    VideoCodec {
         dominant: Dominant<String>,
         actual: String,
     },
@@ -62,7 +62,7 @@ pub async fn generate_outliers(
             if res_check {
                 if let Some(dominant) = &analysis.resolution {
                     if video.width != dominant.value.0 || video.height != dominant.value.1 {
-                        reasons.push(OutlierReason::Resolution {
+                        reasons.push(OutlierReason::VideoResolution {
                             dominant: dominant.clone(),
                             actual: (video.width, video.height),
                         })
@@ -73,7 +73,7 @@ pub async fn generate_outliers(
             if codec_check {
                 if let Some(dominant) = &analysis.codec {
                     if video.codec != dominant.value {
-                        reasons.push(OutlierReason::Codec {
+                        reasons.push(OutlierReason::VideoCodec {
                             dominant: dominant.clone(),
                             actual: video.codec.clone(),
                         })
