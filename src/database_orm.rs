@@ -6,11 +6,9 @@ use sea_orm::{
     prelude::DateTimeWithTimeZone,
 };
 use serde::Serialize;
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 use entity::{prelude::*, *};
-
-use crate::media::Language;
 
 #[hotpath::measure]
 pub async fn database_connect(dsn: &String, migrate: bool) -> Result<DatabaseConnection> {
@@ -28,29 +26,6 @@ pub async fn database_connect(dsn: &String, migrate: bool) -> Result<DatabaseCon
         Migrator::up(&conn, None).await?
     };
     Ok(conn)
-}
-
-pub async fn get_language_id(conn: &DatabaseConnection, language: Language) -> Result<Option<i64>> {
-    let result = Languages::find()
-        .filter(languages::Column::Iso6392.eq(language.iso_639_2()))
-        .one(conn)
-        .await?;
-
-    Ok(result.map(|res| res.id))
-}
-#[hotpath::measure]
-pub async fn get_languages(conn: &DatabaseConnection) -> Result<BTreeMap<i64, String>> {
-    let result = Languages::find().all(conn).await?;
-
-    let mut map: BTreeMap<i64, String> = BTreeMap::new();
-
-    for res in result {
-        if let Some(name) = res.name {
-            map.insert(res.id, name);
-        }
-    }
-
-    Ok(map)
 }
 
 pub async fn get_directory_id(conn: &DatabaseConnection, path: &str) -> Result<Option<i64>> {

@@ -1,37 +1,7 @@
 use anyhow::{Result, anyhow};
 use mediainfo::{self, MediaInfo, Stream, StreamKind};
 use std::path::PathBuf;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Language {
-    English,
-    Spanish,
-    French,
-    German,
-    Chinese,
-    Japanese,
-    Korean,
-    Russian,
-    Italian,
-    Portuguese,
-}
-
-impl Language {
-    pub fn iso_639_2(self) -> &'static str {
-        match self {
-            Language::English => "eng",
-            Language::Spanish => "spa",
-            Language::French => "fra",
-            Language::German => "deu",
-            Language::Chinese => "zho",
-            Language::Japanese => "jpn",
-            Language::Korean => "kor",
-            Language::Russian => "rus",
-            Language::Italian => "ita",
-            Language::Portuguese => "por",
-        }
-    }
-}
+use isolang::Language;
 
 #[derive(Clone, Debug)]
 pub struct VideoStream {
@@ -49,7 +19,7 @@ pub struct AudioStream {
     pub index: i32,
     pub title: Option<String>,
     pub codec: String,
-    pub language: Option<Language>,
+    pub language: Option<String>,
     pub channels: String,
     pub bitrate: Option<i64>,
     pub default: bool,
@@ -61,7 +31,7 @@ pub struct SubtitleStream {
     pub index: i32,
     pub title: Option<String>,
     pub codec: String,
-    pub language: Option<Language>,
+    pub language: Option<String>,
     pub default: bool,
     pub forced: bool,
     pub sdh: bool,
@@ -75,14 +45,22 @@ pub struct Media {
     pub subtitles: Vec<SubtitleStream>,
 }
 
-fn parse_language(language_str: &str) -> Result<Option<Language>> {
-    let language: Option<Language> = match language_str.trim().to_lowercase().as_str() {
-        "english" | "en" | "en-us" => Some(Language::English),
-        "french" | "fr" | "fr-fr" => Some(Language::French),
-        "german" | "de" => Some(Language::German),
-        "japanese" | "ja" => Some(Language::Japanese),
-        "italian" | "it" => Some(Language::Italian),
-        _ => None,
+fn parse_language(language_str: &str) -> Result<Option<String>> {
+    // Split to handle language strings such as en-US
+    let trimmed = language_str
+            .split('-')
+            .next()
+            .unwrap_or(language_str);
+
+    let lang: Option<Language> = Language::from_639_1(trimmed);
+    let language: Option<String> = match lang {
+        Some(lang) => {
+            Some(lang.to_639_3().to_string())
+        },
+        None => {
+            println!("{}", trimmed);
+            None
+        }
     };
 
     Ok(language)
@@ -153,7 +131,6 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             }
 
             for stream in audio_streams {
-                _print_fields(stream);
                 let index: i32 = stream.get("StreamKindID").to_string().parse()?;
                 let title: Option<String> = stream.get("Title").to_string().into();
                 let codec: String = stream.get("Format").to_string();

@@ -15,7 +15,7 @@ pub struct Model {
     pub stream_index: i64,
     pub title: Option<String>,
     pub codec: String,
-    pub language_id: Option<i64>,
+    pub language: Option<String>,
     pub is_default: bool,
     pub is_forced: bool,
     pub is_sdh: bool,
@@ -27,14 +27,6 @@ pub struct Model {
         on_delete = "Cascade"
     )]
     pub files: HasOne<super::files::Entity>,
-    #[sea_orm(
-        belongs_to,
-        from = "language_id",
-        to = "id",
-        on_update = "NoAction",
-        on_delete = "SetNull"
-    )]
-    pub languages: HasOne<super::languages::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

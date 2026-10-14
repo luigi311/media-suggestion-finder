@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::database_orm::{
     get_audio_stream_primary_id_from_file_stream, get_directory_id,
-    get_file_primary_id_from_name_extension, get_language_id,
+    get_file_primary_id_from_name_extension,
     get_media_file_primary_id_from_file_id, get_subtitle_file_primary_id_from_file_id,
     get_subtitle_stream_primary_id_from_file_stream, get_video_stream_primary_id_from_file_stream,
 };
@@ -267,22 +267,12 @@ pub async fn process_audio_stream(
         // TODO: Handle updating existing audio_stream
         Some(_) => {}
         None => {
-            let audio_lang = match audio.language {
-                Some(language) => get_language_id(database, language).await.with_context(|| {
-                    format!(
-                        "failed looking up language {:?} for audio stream \
-                             file_id={file_id}, stream_index={audio_index}",
-                        language
-                    )
-                })?,
-                None => None,
-            };
             let stream: audio_streams::ActiveModel = audio_streams::ActiveModel {
                 file_id: Set(file_id),
                 stream_index: Set(audio.index.into()),
                 title: Set(audio.title),
                 codec: Set(audio.codec),
-                language_id: Set(audio_lang),
+                language: Set(audio.language),
                 channels: Set(audio.channels.into()),
                 bitrate: Set(audio.bitrate),
                 is_default: Set(audio.default),
@@ -329,22 +319,12 @@ pub async fn process_subtitle_stream(
         // TODO: Handle updating existing subtitle_streams
         Some(_) => {}
         None => {
-            let sub_lang = match subtitle.language {
-                Some(language) => get_language_id(database, language).await.with_context(|| {
-                    format!(
-                        "failed looking up language {:?} for audio stream \
-                             file_id={file_id}, stream_index={sub_index}",
-                        language
-                    )
-                })?,
-                None => None,
-            };
             let stream: subtitle_streams::ActiveModel = subtitle_streams::ActiveModel {
                 file_id: Set(file_id),
                 stream_index: Set(subtitle.index.into()),
                 title: Set(subtitle.title),
                 codec: Set(subtitle.codec),
-                language_id: Set(sub_lang),
+                language: Set(subtitle.language),
                 is_default: Set(subtitle.default),
                 is_forced: Set(subtitle.forced),
                 is_sdh: Set(subtitle.sdh),

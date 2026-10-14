@@ -28,8 +28,8 @@ pub struct SetDominant<T> {
 pub struct SiblingAnalysis {
     pub resolution: Option<Dominant<(i64, i64)>>,
     pub codec: Option<Dominant<String>>,
-    pub audio_languages: Option<SetDominant<i64>>,
-    pub subtitle_languages: Option<SetDominant<i64>>,
+    pub audio_languages: Option<SetDominant<String>>,
+    pub subtitle_languages: Option<SetDominant<String>>,
 }
 
 fn counter<T>(values: Vec<T>) -> Option<Dominant<T>>
@@ -81,12 +81,12 @@ where
 pub async fn analyse_siblings(siblings: Vec<MediaMetadata>) -> Result<SiblingAnalysis> {
     let mut resolutions: Vec<(i64, i64)> = Vec::new();
     let mut video_codecs: Vec<String> = Vec::new();
-    let mut audio_languages: Vec<Vec<i64>> = Vec::new();
-    let mut subtitle_languages: Vec<Vec<i64>> = Vec::new();
+    let mut audio_languages: Vec<Vec<String>> = Vec::new();
+    let mut subtitle_languages: Vec<Vec<String>> = Vec::new();
 
     for media in siblings {
-        let mut media_audio_languages: Vec<i64> = Vec::new();
-        let mut media_subtitle_languages: Vec<i64> = Vec::new();
+        let mut media_audio_languages: Vec<String> = Vec::new();
+        let mut media_subtitle_languages: Vec<String> = Vec::new();
 
         for video in media.videos {
             let res: (i64, i64) = (video.width, video.height);
@@ -96,14 +96,14 @@ pub async fn analyse_siblings(siblings: Vec<MediaMetadata>) -> Result<SiblingAna
         }
 
         for audio in media.audios {
-            if let Some(language_id) = audio.language_id {
-                media_audio_languages.push(language_id);
+            if let Some(language) = audio.language {
+                media_audio_languages.push(language);
             }
         }
 
         for subtitle in media.subtitles {
-            if let Some(language_id) = subtitle.language_id {
-                media_subtitle_languages.push(language_id);
+            if let Some(language) = subtitle.language {
+                media_subtitle_languages.push(language);
             }
         }
 
@@ -115,7 +115,6 @@ pub async fn analyse_siblings(siblings: Vec<MediaMetadata>) -> Result<SiblingAna
     let codec_dom: Option<Dominant<String>> = counter(video_codecs);
 
     let audio_language_dom = counter_set(audio_languages, 0.6);
-
     let subtitle_language_dom = counter_set(subtitle_languages, 0.6);
 
     Ok(SiblingAnalysis {

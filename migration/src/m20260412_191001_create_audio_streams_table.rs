@@ -16,7 +16,7 @@ impl MigrationTrait for Migration {
                     .col(integer("stream_index").not_null())
                     .col(string("title").null())
                     .col(string("codec").not_null())
-                    .col(integer("language_id").null())
+                    .col(string("language").null())
                     .col(string("channels").null())
                     .col(integer("bitrate").null())
                     .col(boolean("is_default").not_null().default(false))
@@ -27,13 +27,6 @@ impl MigrationTrait for Migration {
                             .from("audio_streams", "file_id")
                             .to("files", "id")
                             .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_audio_streams_language_id")
-                            .from("audio_streams", "language_id")
-                            .to("languages", "id")
-                            .on_delete(ForeignKeyAction::SetNull),
                     )
                     .to_owned(),
             )
@@ -66,10 +59,10 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_audio_streams_language_id")
+                    .name("idx_audio_streams_language")
                     .if_not_exists()
                     .table("audio_streams")
-                    .col("language_id")
+                    .col("language")
                     .to_owned(),
             )
             .await?;
@@ -101,7 +94,7 @@ impl MigrationTrait for Migration {
         manager
             .drop_index(
                 Index::drop()
-                    .name("idx_audio_streams_language_id")
+                    .name("idx_audio_streams_language")
                     .if_exists()
                     .table("audio_streams")
                     .to_owned(),

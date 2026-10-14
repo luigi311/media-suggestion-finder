@@ -19,6 +19,7 @@ config = "0.15.22"
 entity = { path = "entity" }
 hotpath = { version = "0.28", features = ["tokio", "sqlx", "axum-0-8"] }
 imohash = "0.1.2"
+isolang = { version = "2.4.0", features = ["serde"] }
 itertools = "0.15.0"
 # Downstream mediainfo-rust with some fixes, can revert if issues #1, #2 are fixed upstream
 mediainfo-rust = { git = "https://github.com/luigi311/mediainfo-rust", branch = "downstream" }

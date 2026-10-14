@@ -1,6 +1,5 @@
-use std::collections::BTreeMap;
-
 use anyhow::Result;
+use isolang::Language;
 use serde::Serialize;
 
 use crate::comparison::siblings::{Dominant, analyse_siblings};
@@ -16,7 +15,7 @@ pub struct MediaOutlier {
 
 #[derive(Clone, Debug, Serialize)]
 pub enum OutlierReason {
-    VideoResolution {
+    Resolution {
         dominant: Dominant<(i64, i64)>,
         actual: (i64, i64),
     },
@@ -25,13 +24,11 @@ pub enum OutlierReason {
         actual: String,
     },
     MissingAudioLanguage {
-        language_id: i64,
         language: String,
         count: usize,
         total: usize,
     },
     MissingSubtitleLanguage {
-        language_id: i64,
         language: String,
         count: usize,
         total: usize,
@@ -41,7 +38,6 @@ pub enum OutlierReason {
 #[hotpath::measure]
 pub async fn generate_outliers(
     medias: Vec<MediaMetadata>,
-    languages: &BTreeMap<i64, String>,
 ) -> Result<Vec<MediaOutlier>> {
     let analysis = analyse_siblings(medias.clone()).await?;
     let res_check: bool = match &analysis.resolution {
@@ -62,7 +58,7 @@ pub async fn generate_outliers(
             if res_check {
                 if let Some(dominant) = &analysis.resolution {
                     if video.width != dominant.value.0 || video.height != dominant.value.1 {
-                        reasons.push(OutlierReason::VideoResolution {
+                        reasons.push(OutlierReason::Resolution {
                             dominant: dominant.clone(),
                             actual: (video.width, video.height),
                         })
@@ -83,25 +79,25 @@ pub async fn generate_outliers(
         }
 
         if let Some(dominant) = &analysis.audio_languages {
-            for language_id in &dominant.value {
-                let media_languages: Vec<i64> = media
+            for language in &dominant.value {
+                let media_languages: Vec<String> = media
                     .audios
                     .iter()
-                    .filter_map(|x| x.language_id)
+                    .filter_map(|x| x.language.clone())
                     .map(|x| x)
                     .collect();
 
-                let exists = media_languages.contains(language_id);
+                let exists = media_languages.contains(language);
 
                 if !exists {
-                    let language: String = match languages.get(language_id) {
-                        Some(x) => x.clone(),
-                        None => "".to_string(),
+                    let lang = match Language::from_639_3(language) {
+                        Some(x) => x.to_string(),
+                        None => language.clone(),
                     };
+
                     reasons.push(OutlierReason::MissingAudioLanguage {
-                        language_id: *language_id,
-                        language: language,
-                        count: dominant.count[language_id],
+                        language: lang,
+                        count: dominant.count[language],
                         total: dominant.total,
                     });
                 }
@@ -109,25 +105,25 @@ pub async fn generate_outliers(
         }
 
         if let Some(dominant) = &analysis.subtitle_languages {
-            for language_id in &dominant.value {
-                let media_languages: Vec<i64> = media
+            for language in &dominant.value {
+                let media_languages: Vec<String> = media
                     .subtitles
                     .iter()
-                    .filter_map(|x| x.language_id)
+                    .filter_map(|x| x.language.clone())
                     .map(|x| x)
                     .collect();
 
-                let exists = media_languages.contains(language_id);
+                let exists = media_languages.contains(language);
 
                 if !exists {
-                    let language: String = match languages.get(language_id) {
-                        Some(x) => x.clone(),
-                        None => "".to_string(),
+                    let lang = match Language::from_639_3(language) {
+                        Some(x) => x.to_string(),
+                        None => language.clone(),
                     };
+
                     reasons.push(OutlierReason::MissingSubtitleLanguage {
-                        language_id: *language_id,
-                        language: language,
-                        count: dominant.count[language_id],
+                        language: lang,
+                        count: dominant.count[language],
                         total: dominant.total,
                     });
                 }
