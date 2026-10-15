@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use imohash::Hasher;
 use std::path::PathBuf;
+use tokio::task::JoinSet;
 use tokio::time::{Duration, sleep};
 
 use sea_orm::DatabaseConnection;
@@ -11,7 +12,7 @@ use crate::database_process::{
     process_audio_stream, process_directory, process_file, process_media_file,
     process_subtitle_file, process_subtitle_stream, process_video_stream,
 };
-use crate::files::{find_media_subtitle_pairs, iterate_folder};
+use crate::files::{MediaPairHashes, find_media_subtitle_pairs, hash_media_pairs, iterate_folder};
 use crate::media::{Media, parse_media};
 
 #[derive(Clone, Debug)]
@@ -22,11 +23,11 @@ struct ParsedMedia {
 }
 
 #[hotpath::measure]
-async fn parse_file(
+async fn should_parse_file(
     orm_database: &DatabaseConnection,
     file: &PathBuf,
-    hasher: Hasher,
-) -> Result<(Option<i64>, Option<(String, Media)>)> {
+    hash: &String,
+) -> Result<(bool, Option<i64>)> {
     let parent = file
         .parent()
         .with_context(|| format!("Failed to get parent path"))?;
@@ -34,32 +35,35 @@ async fn parse_file(
         .await
         .with_context(|| format!("failed processing directory {}", parent.display()))?;
 
-    let path = file
-        .to_str()
-        .with_context(|| format!("Failed to get path"))?;
-    let hash = hotpath::measure_block!("hash_media_file", {
-        let hash = hasher.sum_file(path);
-        hash
-    })?
-    .to_string();
-
     // Check if hash exists in directory_id if not parse and process
-    let parsed_media: (Option<i64>, Option<(String, Media)>) =
-        match get_file_primary_id_from_hash(orm_database, directory_id, &hash).await? {
-            Some(file_id) => (Some(file_id), None),
-            None => {
-                let parsed_file = match parse_media(file).await {
-                    Ok(media) => media,
-                    Err(error) => {
-                        eprintln!("Skipping {}: {error:#}", file.display());
-                        return Ok((None, None));
-                    }
-                };
-                (None, Some((hash, parsed_file)))
-            }
+    let parsed_media: (bool, Option<i64>) =
+        match get_file_primary_id_from_hash(orm_database, directory_id, hash).await? {
+            Some(file_id) => (false, Some(file_id)),
+            None => (true, None),
         };
 
     Ok(parsed_media)
+}
+
+async fn actually_parse_file(pair: MediaPairHashes) -> Result<ParsedMedia> {
+    let parsed_media = parse_media(&pair.media.0)
+        .await
+        .with_context(|| format!("failed processing media {}", pair.media.0.display()))?;
+
+    let mut parsed_subtitles: Vec<(String, Media)> = Vec::new();
+
+    for sub in pair.subtitles {
+        let parsed_subtitle = parse_media(&sub.0)
+            .await
+            .with_context(|| format!("failed processing subtitle {}", pair.media.0.display()))?;
+
+        parsed_subtitles.push((sub.1, parsed_subtitle));
+    }
+
+    Ok(ParsedMedia {
+        media: (pair.media.1, parsed_media),
+        subtitles: parsed_subtitles,
+    })
 }
 
 #[hotpath::measure]
@@ -72,66 +76,73 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
         .with_context(|| format!("failed scanning {}", path.display()))?;
 
     let files = find_media_subtitle_pairs(all_files).await;
-    let mut parsed: Vec<ParsedMedia> = Vec::new();
+    let hased_pairs = hash_media_pairs(files, hasher).await?;
+    // path, hash
+    let mut to_parse: Vec<MediaPairHashes> = Vec::new();
 
-    for file in files {
-        let media_file = &file.media;
-        let parsed_media: (String, Media);
-        match media_file {
-            None => {
-                println!("No file for {:?}, skipping", &file);
+    for pair in hased_pairs {
+        let media_to_parse: (PathBuf, String);
+        let media_file = &pair.media;
+        let should = should_parse_file(orm_database, &media_file.0, &media_file.1)
+            .await
+            .with_context(|| {
+                format!("failed to check if should parse {}", media_file.0.display())
+            })?;
+        match should {
+            (true, None) => media_to_parse = media_file.clone(),
+            (false, Some(file_id)) => {
+                println!("File {} is already processed", media_file.0.display());
+                found_files.push(file_id);
                 continue;
             }
-            Some(media_file) => {
-                let parsed_file = parse_file(orm_database, media_file, hasher)
-                    .await
-                    .with_context(|| format!("failed parsing {}", media_file.display()))?;
-                match parsed_file {
-                    (None, Some(parsed)) => parsed_media = parsed,
-                    (Some(file_id), None) => {
-                        println!("File {} is already processed", media_file.display());
-                        found_files.push(file_id);
-                        continue;
-                    }
-                    (None, None) => {
-                        println!("Not sure how you got here");
-                        continue;
-                    }
-                    (Some(_), Some(_)) => {
-                        println!("Not sure how you got here");
-                        continue;
-                    }
-                }
+            _ => {
+                println!("Not sure how you got here");
+                continue;
             }
-        };
+        }
 
-        let mut parsed_subtitles: Vec<(String, Media)> = Vec::new();
-        let subtitle_files = &file.subtitles;
-        for sub_file in subtitle_files {
-            let parsed_file = parse_file(orm_database, sub_file, hasher).await?;
-            match parsed_file {
-                (None, Some(parsed)) => {
-                    parsed_subtitles.push(parsed);
+        let mut subtitles_to_parse: Vec<(PathBuf, String)> = Vec::new();
+        for sub_file in &pair.subtitles {
+            let should = should_parse_file(orm_database, &sub_file.0, &sub_file.1).await?;
+            match should {
+                (true, None) => {
+                    subtitles_to_parse.push(sub_file.clone());
                 }
-                (Some(file_id), None) => {
+                (false, Some(file_id)) => {
+                    println!("File {} is already processed", sub_file.0.display());
                     found_files.push(file_id);
                     continue;
                 }
-                (None, None) => {
-                    println!("Not sure how you got here");
-                    continue;
-                }
-                (Some(_), Some(_)) => {
+                _ => {
                     println!("Not sure how you got here");
                     continue;
                 }
             }
         }
 
-        parsed.push(ParsedMedia {
-            media: parsed_media,
-            subtitles: parsed_subtitles,
+        to_parse.push(MediaPairHashes {
+            media: media_to_parse,
+            subtitles: subtitles_to_parse,
         })
+    }
+
+    let mut parsed: Vec<ParsedMedia> = Vec::new();
+
+    let mut jobs = JoinSet::new();
+    for parsing in to_parse {
+        jobs.spawn(actually_parse_file(parsing));
+    }
+
+    while let Some(res) = jobs.join_next().await {
+        match res {
+            Ok(val) => {
+                match val {
+                    Ok(x) => parsed.push(x),
+                    Err(e) => eprintln!("Parsing failed: {}", e),
+                }
+            },
+            Err(e) => eprintln!("Parsing failed: {}", e),
+        }
     }
 
     for parse in parsed {
