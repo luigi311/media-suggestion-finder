@@ -67,7 +67,11 @@ async fn actually_parse_file(pair: MediaPairHashes) -> Result<ParsedMedia> {
 }
 
 #[hotpath::measure]
-async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Result<()> {
+async fn process_library(
+    path: PathBuf,
+    orm_database: &DatabaseConnection,
+    max_concurrent_parses: usize,
+) -> Result<()> {
     let hasher = Hasher::new();
     let mut found_files: Vec<i64> = Vec::new();
 
@@ -127,21 +131,27 @@ async fn process_library(path: PathBuf, orm_database: &DatabaseConnection) -> Re
     }
 
     let mut parsed: Vec<ParsedMedia> = Vec::new();
-
+    let mut pending = to_parse.into_iter();
     let mut jobs = JoinSet::new();
-    for parsing in to_parse {
-        jobs.spawn(actually_parse_file(parsing));
-    }
+    loop {
+        // Fill the available slots.
+        while jobs.len() < max_concurrent_parses {
+            let Some(parsing) = pending.next() else {
+                break;
+            };
 
-    while let Some(res) = jobs.join_next().await {
-        match res {
-            Ok(val) => {
-                match val {
-                    Ok(x) => parsed.push(x),
-                    Err(e) => eprintln!("Parsing failed: {}", e),
-                }
-            },
-            Err(e) => eprintln!("Parsing failed: {}", e),
+            jobs.spawn(actually_parse_file(parsing));
+        }
+
+        // Collect one result, freeing a slot for another task.
+        let Some(result) = jobs.join_next().await else {
+            break;
+        };
+
+        match result {
+            Ok(Ok(media)) => parsed.push(media),
+            Ok(Err(error)) => eprintln!("Parsing failed: {error:#}"),
+            Err(error) => eprintln!("Parsing task failed: {error}"),
         }
     }
 
@@ -257,9 +267,13 @@ pub async fn indexing(config: AppConfig, orm_database: DatabaseConnection) -> Re
 
     loop {
         // Box::pin required due to async future size growing like crazy especially when utilizing hotpath
-        Box::pin(process_library(path.clone(), &orm_database))
-            .await
-            .with_context(|| format!("failed processing library {}", path.display()))?;
+        Box::pin(process_library(
+            path.clone(),
+            &orm_database,
+            config.file.concurrent_parse,
+        ))
+        .await
+        .with_context(|| format!("failed processing library {}", path.display()))?;
 
         sleep(Duration::from_mins(60)).await;
     }
