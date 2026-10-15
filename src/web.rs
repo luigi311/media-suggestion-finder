@@ -95,13 +95,12 @@ async fn outliers(
         })?;
 
     let mut outliers: Vec<MediaOutlier> = Vec::new();
-    let metadatas =
-        get_metadata_from_directory(&orm_database, SingleList::List(directories_ids.clone()))
-            .await
-            .map_err(|e| {
-                eprintln!("failed fetching media metadata for directory ids: {e}");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+    let metadatas = get_metadata_from_directory(&orm_database, SingleList::List(directories_ids))
+        .await
+        .map_err(|e| {
+            eprintln!("failed fetching media metadata for directory ids: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     for (dir_id, metadata) in metadatas {
         let analysis = generate_outliers(metadata).await.map_err(|e| {

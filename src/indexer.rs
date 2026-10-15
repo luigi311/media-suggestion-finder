@@ -68,7 +68,7 @@ async fn actually_parse_file(pair: MediaPairHashes) -> Result<ParsedMedia> {
 
 #[hotpath::measure]
 async fn process_library(
-    path: PathBuf,
+    path: &PathBuf,
     orm_database: &DatabaseConnection,
     max_concurrent_parses: usize,
     max_concurrent_hashes: usize,
@@ -76,7 +76,7 @@ async fn process_library(
     let hasher = Hasher::new();
     let mut found_files: Vec<i64> = Vec::new();
 
-    let all_files = iterate_folder(path.clone())
+    let all_files = iterate_folder(&path)
         .await
         .with_context(|| format!("failed scanning {}", path.display()))?;
 
@@ -269,7 +269,7 @@ pub async fn indexing(config: AppConfig, orm_database: DatabaseConnection) -> Re
     loop {
         // Box::pin required due to async future size growing like crazy especially when utilizing hotpath
         Box::pin(process_library(
-            path.clone(),
+            &path,
             &orm_database,
             config.file.concurrent_parse,
             config.file.concurrent_hash,

@@ -78,9 +78,10 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
 
         if let Some(dominant) = &analysis.audio_languages {
             for language in &dominant.value {
-                let exists = media.audios.iter().any(|audio| {
-                    audio.language.as_deref() == Some(language.as_str())
-                });
+                let exists = media
+                    .audios
+                    .iter()
+                    .any(|audio| audio.language.as_deref() == Some(language.as_str()));
 
                 if !exists {
                     let lang = match Language::from_639_3(language) {
@@ -99,9 +100,10 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
 
         if let Some(dominant) = &analysis.subtitle_languages {
             for language in &dominant.value {
-                let exists = media.subtitles.iter().any(|subtitle| {
-                    subtitle.language.as_deref() == Some(language.as_str())
-                });
+                let exists = media
+                    .subtitles
+                    .iter()
+                    .any(|subtitle| subtitle.language.as_deref() == Some(language.as_str()));
 
                 if !exists {
                     let lang = match Language::from_639_3(language) {

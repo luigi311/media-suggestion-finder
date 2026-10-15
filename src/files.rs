@@ -32,7 +32,7 @@ pub struct MediaPairHashes {
 
 #[hotpath::measure]
 #[async_recursion]
-pub async fn iterate_folder(path: PathBuf) -> Result<Vec<DirectoryScan>> {
+pub async fn iterate_folder(path: &PathBuf) -> Result<Vec<DirectoryScan>> {
     let mut results: Vec<DirectoryScan> = Vec::new();
     let mut media_files: Vec<PathBuf> = Vec::new();
     let mut subtitle_files: Vec<PathBuf> = Vec::new();
@@ -43,7 +43,7 @@ pub async fn iterate_folder(path: PathBuf) -> Result<Vec<DirectoryScan>> {
         let entry_path = entry.path();
 
         if entry_path.is_dir() {
-            subdir_results.extend(iterate_folder(entry_path).await?);
+            subdir_results.extend(iterate_folder(&entry_path).await?);
             continue;
         }
 
