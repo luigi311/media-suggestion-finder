@@ -75,7 +75,7 @@ async fn dominant(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let analysis = analyse_siblings(metadata).await.map_err(|e| {
+    let analysis = analyse_siblings(&metadata).await.map_err(|e| {
         eprintln!("Failed analysing sibling metadata: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

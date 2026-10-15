@@ -78,7 +78,7 @@ where
 }
 
 #[hotpath::measure]
-pub async fn analyse_siblings(siblings: Vec<MediaMetadata>) -> Result<SiblingAnalysis> {
+pub async fn analyse_siblings(siblings: &Vec<MediaMetadata>) -> Result<SiblingAnalysis> {
     let mut resolutions: Vec<(i64, i64)> = Vec::new();
     let mut video_codecs: Vec<String> = Vec::new();
     let mut audio_languages: Vec<Vec<String>> = Vec::new();
@@ -88,22 +88,22 @@ pub async fn analyse_siblings(siblings: Vec<MediaMetadata>) -> Result<SiblingAna
         let mut media_audio_languages: Vec<String> = Vec::new();
         let mut media_subtitle_languages: Vec<String> = Vec::new();
 
-        for video in media.videos {
+        for video in &media.videos {
             let res: (i64, i64) = (video.width, video.height);
             resolutions.push(res);
 
-            video_codecs.push(video.codec);
+            video_codecs.push(video.codec.clone());
         }
 
-        for audio in media.audios {
-            if let Some(language) = audio.language {
-                media_audio_languages.push(language);
+        for audio in &media.audios {
+            if let Some(language) = &audio.language {
+                media_audio_languages.push(language.to_string());
             }
         }
 
-        for subtitle in media.subtitles {
-            if let Some(language) = subtitle.language {
-                media_subtitle_languages.push(language);
+        for subtitle in &media.subtitles {
+            if let Some(language) = &subtitle.language {
+                media_subtitle_languages.push(language.to_string());
             }
         }
 

@@ -37,7 +37,7 @@ pub enum OutlierReason {
 
 #[hotpath::measure]
 pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOutlier>> {
-    let analysis = analyse_siblings(medias.clone()).await?;
+    let analysis = analyse_siblings(&medias).await?;
     let res_check: bool = match &analysis.resolution {
         Some(x) => x.count != x.total,
         None => false,
@@ -78,14 +78,9 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
 
         if let Some(dominant) = &analysis.audio_languages {
             for language in &dominant.value {
-                let media_languages: Vec<String> = media
-                    .audios
-                    .iter()
-                    .filter_map(|x| x.language.clone())
-                    .map(|x| x)
-                    .collect();
-
-                let exists = media_languages.contains(language);
+                let exists = media.audios.iter().any(|audio| {
+                    audio.language.as_deref() == Some(language.as_str())
+                });
 
                 if !exists {
                     let lang = match Language::from_639_3(language) {
@@ -104,14 +99,9 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
 
         if let Some(dominant) = &analysis.subtitle_languages {
             for language in &dominant.value {
-                let media_languages: Vec<String> = media
-                    .subtitles
-                    .iter()
-                    .filter_map(|x| x.language.clone())
-                    .map(|x| x)
-                    .collect();
-
-                let exists = media_languages.contains(language);
+                let exists = media.subtitles.iter().any(|subtitle| {
+                    subtitle.language.as_deref() == Some(language.as_str())
+                });
 
                 if !exists {
                     let lang = match Language::from_639_3(language) {
