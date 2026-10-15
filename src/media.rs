@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow};
 use isolang::Language;
 use mediainfo::{self, MediaInfo, Stream, StreamKind};
 use std::path::PathBuf;
+use tokio::task::spawn_blocking;
 
 #[derive(Clone, Debug)]
 pub struct VideoStream {
@@ -93,13 +94,21 @@ fn _print_fields(stream: &Stream) -> () {
 
 #[hotpath::measure]
 pub async fn parse_media(path: &PathBuf) -> Result<Media> {
-    let mut media = MediaInfo::new();
-
     let mut videos: Vec<VideoStream> = Vec::new();
     let mut audios: Vec<AudioStream> = Vec::new();
     let mut subtitles: Vec<SubtitleStream> = Vec::new();
 
-    match media.try_open(&path) {
+    let (media, opened) = hotpath::measure_block!("media_info_parse", {
+        let owned_path = path.clone();
+        spawn_blocking(move || {
+            let mut media = MediaInfo::new();
+            let opened = media.try_open(&owned_path);
+
+            (media, opened)
+        })
+        .await?
+    });
+    match opened {
         Ok(true) => {
             println!("Parsing: {}", path.display());
             let video_streams = media.streams(StreamKind::Video);
