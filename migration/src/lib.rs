@@ -7,6 +7,7 @@ mod m20260412_190250_create_subtitle_files;
 mod m20260412_190315_create_video_streams_table;
 mod m20260412_191001_create_audio_streams_table;
 mod m20260412_191344_subtitle_streams_table;
+mod m20261015_183445_create_file_id_indexes;
 
 pub struct Migrator;
 
@@ -21,6 +22,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260412_190315_create_video_streams_table::Migration),
             Box::new(m20260412_191001_create_audio_streams_table::Migration),
             Box::new(m20260412_191344_subtitle_streams_table::Migration),
+            Box::new(m20261015_183445_create_file_id_indexes::Migration),
         ]
     }
 }

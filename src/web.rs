@@ -9,8 +9,8 @@ use sea_orm::DatabaseConnection;
 use crate::AppConfig;
 use crate::comparison::{MediaOutlier, SiblingAnalysis, analyse_siblings, generate_outliers};
 use crate::database_orm::{
-    MediaMetadata, database_connect, get_all_metadata, get_directories_with_media_files,
-    get_file_metadata, get_metadata_from_directory,
+    MediaMetadata, SingleList, database_connect, get_all_metadata,
+    get_directories_with_media_files, get_file_metadata, get_metadata_from_directory,
 };
 
 #[hotpath::measure]
@@ -95,14 +95,15 @@ async fn outliers(
         })?;
 
     let mut outliers: Vec<MediaOutlier> = Vec::new();
-    for dir_id in directories_ids {
-        let metadata = get_metadata_from_directory(&orm_database, dir_id)
+    let metadatas =
+        get_metadata_from_directory(&orm_database, SingleList::List(directories_ids.clone()))
             .await
             .map_err(|e| {
-                eprintln!("failed fetching media metadata for directory id {dir_id}: {e}");
+                eprintln!("failed fetching media metadata for directory ids: {e}");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
+    for (dir_id, metadata) in metadatas {
         let analysis = generate_outliers(metadata).await.map_err(|e| {
             eprintln!("failed to generate outliers for directory id {dir_id}: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
