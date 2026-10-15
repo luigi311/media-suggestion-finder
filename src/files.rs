@@ -194,10 +194,12 @@ async fn hash_media_pair(pair: MediaPair, hasher: Hasher) -> Result<Option<Media
         .to_str()
         .with_context(|| format!("Failed to get path"))?;
 
-    let Ok(hash) = hotpath::measure_block!("hash_media_file", {
-        let owned_path = path.to_owned();
-        spawn_blocking(move || hasher.sum_file(&owned_path)).await?
-    }) else {
+    let owned_path = path.to_owned();
+    let Ok(hash) = spawn_blocking(move || {
+        hotpath::measure_block!("hash_media_file", hasher.sum_file(&owned_path))
+    })
+    .await?
+    else {
         return Ok(None);
     };
 
@@ -208,10 +210,12 @@ async fn hash_media_pair(pair: MediaPair, hasher: Hasher) -> Result<Option<Media
             .to_str()
             .with_context(|| format!("Failed to get path"))?;
 
-        let Ok(hash) = hotpath::measure_block!("hash_subtitle_file", {
-            let owned_path = path.to_owned();
-            spawn_blocking(move || hasher.sum_file(&owned_path)).await?
-        }) else {
+        let owned_path = path.to_owned();
+        let Ok(hash) = spawn_blocking(move || {
+            hotpath::measure_block!("hash_subtitle_file", hasher.sum_file(&owned_path))
+        })
+        .await?
+        else {
             continue;
         };
 

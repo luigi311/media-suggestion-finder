@@ -98,16 +98,16 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
     let mut audios: Vec<AudioStream> = Vec::new();
     let mut subtitles: Vec<SubtitleStream> = Vec::new();
 
-    let (media, opened) = hotpath::measure_block!("media_info_parse", {
-        let owned_path = path.clone();
-        spawn_blocking(move || {
+    let owned_path = path.clone();
+    let (media, opened) = spawn_blocking(move || {
+        hotpath::measure_block!("media_info_parse", {
             let mut media = MediaInfo::new();
             let opened = media.try_open(&owned_path);
 
             (media, opened)
         })
-        .await?
-    });
+    })
+    .await?;
     match opened {
         Ok(true) => {
             println!("Parsing: {}", path.display());
