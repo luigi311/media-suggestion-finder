@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use migration::{Expr, Migrator, MigratorTrait};
 use sea_orm::{
-    ConnectOptions, Database, DatabaseConnection, QueryFilter, QuerySelect, entity::*,
+    ConnectOptions, Database, DatabaseConnection, FromQueryResult, QueryFilter, QuerySelect, entity::*,
     prelude::DateTimeWithTimeZone,
 };
 use serde::Serialize;
@@ -37,12 +37,15 @@ pub async fn database_connect(dsn: &String, migrate: bool) -> Result<DatabaseCon
 }
 
 pub async fn get_directory_id(conn: &DatabaseConnection, path: &str) -> Result<Option<i64>> {
-    let result: Option<directories::Model> = Directories::find()
+    let result: Option<i64> = Directories::find()
+        .select_only()
+        .column(directories::Column::Id)
         .filter(directories::Column::Path.eq(path))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_file_primary_id_from_name_extension(
@@ -51,14 +54,17 @@ pub async fn get_file_primary_id_from_name_extension(
     name: &str,
     extension: &str,
 ) -> Result<Option<i64>> {
-    let result: Option<files::Model> = Files::find()
+    let result: Option<i64> = Files::find()
+        .select_only()
+        .column(files::Column::Id)
         .filter(files::Column::DirectoryId.eq(directory_id))
         .filter(files::Column::Name.eq(name))
         .filter(files::Column::Extension.eq(extension))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_file_primary_id_from_hash(
@@ -66,37 +72,46 @@ pub async fn get_file_primary_id_from_hash(
     directory_id: i64,
     hash: &String,
 ) -> Result<Option<i64>> {
-    let result: Option<files::Model> = Files::find()
+    let result: Option<i64> = Files::find()
+        .select_only()
+        .column(files::Column::Id)
         .filter(files::Column::DirectoryId.eq(directory_id))
         .filter(files::Column::Hash.eq(hash))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_media_file_primary_id_from_file_id(
     conn: &DatabaseConnection,
     file_id: i64,
 ) -> Result<Option<i64>> {
-    let result: Option<media_files::Model> = MediaFiles::find()
+    let result: Option<i64> = MediaFiles::find()
+        .select_only()
+        .column(media_files::Column::Id)
         .filter(media_files::Column::FileId.eq(file_id))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_subtitle_file_primary_id_from_file_id(
     conn: &DatabaseConnection,
     file_id: i64,
 ) -> Result<Option<i64>> {
-    let result: Option<subtitle_files::Model> = SubtitleFiles::find()
+    let result: Option<i64> = SubtitleFiles::find()
+        .select_only()
+        .column(subtitle_files::Column::Id)
         .filter(subtitle_files::Column::FileId.eq(file_id))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_video_stream_primary_id_from_file_stream(
@@ -104,13 +119,16 @@ pub async fn get_video_stream_primary_id_from_file_stream(
     file_id: i64,
     index: i32,
 ) -> Result<Option<i64>> {
-    let result: Option<video_streams::Model> = VideoStreams::find()
+    let result: Option<i64> = VideoStreams::find()
+        .select_only()
+        .column(video_streams::Column::Id)
         .filter(video_streams::Column::FileId.eq(file_id))
         .filter(video_streams::Column::StreamIndex.eq(index))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_audio_stream_primary_id_from_file_stream(
@@ -118,13 +136,16 @@ pub async fn get_audio_stream_primary_id_from_file_stream(
     file_id: i64,
     index: i32,
 ) -> Result<Option<i64>> {
-    let result: Option<audio_streams::Model> = AudioStreams::find()
+    let result: Option<i64> = AudioStreams::find()
+        .select_only()
+        .column(audio_streams::Column::Id)
         .filter(audio_streams::Column::FileId.eq(file_id))
         .filter(audio_streams::Column::StreamIndex.eq(index))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 pub async fn get_subtitle_stream_primary_id_from_file_stream(
@@ -132,13 +153,16 @@ pub async fn get_subtitle_stream_primary_id_from_file_stream(
     file_id: i64,
     index: i32,
 ) -> Result<Option<i64>> {
-    let result: Option<subtitle_streams::Model> = SubtitleStreams::find()
+    let result: Option<i64> = SubtitleStreams::find()
+        .select_only()
+        .column(subtitle_streams::Column::Id)
         .filter(subtitle_streams::Column::FileId.eq(file_id))
         .filter(subtitle_streams::Column::StreamIndex.eq(index))
+        .into_tuple()
         .one(conn)
         .await?;
 
-    Ok(result.map(|res| res.id))
+    Ok(result)
 }
 
 #[hotpath::measure]
@@ -155,6 +179,27 @@ pub async fn get_directories_with_media_files(conn: &DatabaseConnection) -> Resu
     Ok(result)
 }
 
+// Stream info required for outlier analysis
+#[derive(Clone, Debug, Serialize, FromQueryResult)]
+pub struct VideoMetadata {
+    pub file_id: i64,
+    pub codec: String,
+    pub width: i64,
+    pub height: i64,
+}
+
+#[derive(Clone, Debug, Serialize, FromQueryResult)]
+pub struct AudioMetadata {
+    pub file_id: i64,
+    pub language: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, FromQueryResult)]
+pub struct SubtitleMetadata {
+    pub file_id: i64,
+    pub language: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct MediaMetadata {
     pub file_id: i64,
@@ -164,16 +209,16 @@ pub struct MediaMetadata {
     pub extension: String,
     pub size: i64,
 
-    pub videos: Vec<video_streams::Model>,
-    pub audios: Vec<audio_streams::Model>,
-    pub subtitles: Vec<subtitle_streams::Model>,
+    pub videos: Vec<VideoMetadata>,
+    pub audios: Vec<AudioMetadata>,
+    pub subtitles: Vec<SubtitleMetadata>,
 }
 
 #[derive(Default)]
 struct Streams {
-    videos: Vec<video_streams::Model>,
-    audios: Vec<audio_streams::Model>,
-    subtitles: Vec<subtitle_streams::Model>,
+    videos: Vec<VideoMetadata>,
+    audios: Vec<AudioMetadata>,
+    subtitles: Vec<SubtitleMetadata>,
 }
 
 #[hotpath::measure]
@@ -211,7 +256,13 @@ pub async fn get_metadata_from_directory(
         //rechunk since its possible to get a ton of file_ids
         for file_chunk in file_ids.chunks(CHUNK_SIZE) {
             for stream in VideoStreams::find()
+                .select_only()
+                .column(video_streams::Column::FileId)
+                .column(video_streams::Column::Codec)
+                .column(video_streams::Column::Width)
+                .column(video_streams::Column::Height)
                 .filter(video_streams::Column::FileId.is_in(file_chunk))
+                .into_model::<VideoMetadata>()
                 .all(conn)
                 .await?
             {
@@ -223,7 +274,11 @@ pub async fn get_metadata_from_directory(
             }
 
             for stream in AudioStreams::find()
+                .select_only()
+                .column(audio_streams::Column::FileId)
+                .column(audio_streams::Column::Language)
                 .filter(audio_streams::Column::FileId.is_in(file_chunk))
+                .into_model::<AudioMetadata>()
                 .all(conn)
                 .await?
             {
@@ -235,7 +290,11 @@ pub async fn get_metadata_from_directory(
             }
 
             for stream in SubtitleStreams::find()
+                .select_only()
+                .column(subtitle_streams::Column::FileId)
+                .column(subtitle_streams::Column::Language)
                 .filter(subtitle_streams::Column::FileId.is_in(file_chunk))
+                .into_model::<SubtitleMetadata>()
                 .all(conn)
                 .await?
             {
@@ -289,18 +348,32 @@ pub async fn get_file_metadata(
 
     match file_ids {
         Some(file) => {
-            let v_streams: Vec<video_streams::Model> = VideoStreams::find()
+            let v_streams: Vec<VideoMetadata> = VideoStreams::find()
+                .select_only()
+                .column(video_streams::Column::FileId)
+                .column(video_streams::Column::Codec)
+                .column(video_streams::Column::Width)
+                .column(video_streams::Column::Height)
                 .filter(video_streams::Column::FileId.eq(file.0))
+                .into_model::<VideoMetadata>()
                 .all(conn)
                 .await?;
 
-            let a_streams: Vec<audio_streams::Model> = AudioStreams::find()
+            let a_streams: Vec<AudioMetadata> = AudioStreams::find()
+                .select_only()
+                .column(audio_streams::Column::FileId)
+                .column(audio_streams::Column::Language)
                 .filter(audio_streams::Column::FileId.eq(file.0))
+                .into_model::<AudioMetadata>()
                 .all(conn)
                 .await?;
 
-            let s_streams: Vec<subtitle_streams::Model> = SubtitleStreams::find()
+            let s_streams: Vec<SubtitleMetadata> = SubtitleStreams::find()
+                .select_only()
+                .column(subtitle_streams::Column::FileId)
+                .column(subtitle_streams::Column::Language)
                 .filter(subtitle_streams::Column::FileId.eq(file.0))
+                .into_model::<SubtitleMetadata>()
                 .all(conn)
                 .await?;
 
@@ -341,7 +414,13 @@ pub async fn get_all_metadata(conn: &DatabaseConnection) -> Result<Vec<MediaMeta
 
     for file_chunk in file_ids.chunks(CHUNK_SIZE) {
         for stream in VideoStreams::find()
+            .select_only()
+            .column(video_streams::Column::FileId)
+            .column(video_streams::Column::Codec)
+            .column(video_streams::Column::Width)
+            .column(video_streams::Column::Height)
             .filter(video_streams::Column::FileId.is_in(file_chunk))
+            .into_model::<VideoMetadata>()
             .all(conn)
             .await?
         {
@@ -353,7 +432,11 @@ pub async fn get_all_metadata(conn: &DatabaseConnection) -> Result<Vec<MediaMeta
         }
 
         for stream in AudioStreams::find()
+            .select_only()
+            .column(audio_streams::Column::FileId)
+            .column(audio_streams::Column::Language)
             .filter(audio_streams::Column::FileId.is_in(file_chunk))
+            .into_model::<AudioMetadata>()
             .all(conn)
             .await?
         {
@@ -365,7 +448,11 @@ pub async fn get_all_metadata(conn: &DatabaseConnection) -> Result<Vec<MediaMeta
         }
 
         for stream in SubtitleStreams::find()
+            .select_only()
+            .column(subtitle_streams::Column::FileId)
+            .column(subtitle_streams::Column::Language)
             .filter(subtitle_streams::Column::FileId.is_in(file_chunk))
+            .into_model::<SubtitleMetadata>()
             .all(conn)
             .await?
         {
