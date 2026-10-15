@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use imohash::Hasher;
 use std::path::PathBuf;
-use tokio::{fs::read_dir, task::spawn_blocking};
+use tokio::{
+    fs::read_dir,
+    task::{JoinSet, spawn_blocking},
+};
 
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "mkv", "avi", "mov", "wmv"];
 const AUDIO_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "ogg"];
@@ -153,59 +156,72 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
 pub async fn hash_media_pairs(
     pairs: Vec<MediaPair>,
     hasher: Hasher,
+    max_concurrent_hashes: usize,
 ) -> Result<Vec<MediaPairHashes>> {
     let mut hashed_pairs: Vec<MediaPairHashes> = Vec::new();
+    let mut pending = pairs.into_iter();
+    let mut jobs = JoinSet::new();
 
-    for pair in pairs {
-        let media_hashed: (PathBuf, String);
-        if let Some(media) = pair.media {
-            let path = media
-                .to_str()
-                .with_context(|| format!("Failed to get path"))?;
-
-            let Ok(hash) = hotpath::measure_block!("hash_media_file", {
-                let owned_path = path.to_owned();
-                spawn_blocking(move || {
-                    let hash = hasher.sum_file(&owned_path);
-                    hash
-                })
-                .await?
-            }) else {
-                continue;
+    loop {
+        // Fill the available slots.
+        while jobs.len() < max_concurrent_hashes {
+            let Some(pair) = pending.next() else {
+                break;
             };
 
-            media_hashed = (media, hash.to_string());
-        } else {
-            continue;
+            jobs.spawn(hash_media_pair(pair, hasher));
         }
 
-        let mut subtitles_hashed: Vec<(PathBuf, String)> = Vec::new();
-        for subtitle in pair.subtitles {
-            let path = subtitle
-                .to_str()
-                .with_context(|| format!("Failed to get path"))?;
+        // Collect one result, freeing a slot for another task.
+        let Some(result) = jobs.join_next().await else {
+            break;
+        };
 
-            let Ok(hash) = hotpath::measure_block!("hash_subtitle_file", {
-                let owned_path = path.to_owned();
-                spawn_blocking(move || {
-                    let hash = hasher.sum_file(&owned_path);
-                    hash
-                })
-                .await?
-            }) else {
-                continue;
-            };
-
-            subtitles_hashed.push((subtitle, hash.to_string()));
+        if let Some(pair) = result.context("hashing task failed")?? {
+            hashed_pairs.push(pair);
         }
-
-        hashed_pairs.push(MediaPairHashes {
-            media: media_hashed,
-            subtitles: subtitles_hashed,
-        })
     }
 
     Ok(hashed_pairs)
+}
+
+#[hotpath::measure]
+async fn hash_media_pair(pair: MediaPair, hasher: Hasher) -> Result<Option<MediaPairHashes>> {
+    let Some(media) = pair.media else {
+        return Ok(None);
+    };
+    let path = media
+        .to_str()
+        .with_context(|| format!("Failed to get path"))?;
+
+    let Ok(hash) = hotpath::measure_block!("hash_media_file", {
+        let owned_path = path.to_owned();
+        spawn_blocking(move || hasher.sum_file(&owned_path)).await?
+    }) else {
+        return Ok(None);
+    };
+
+    let media_hashed = (media, hash.to_string());
+    let mut subtitles_hashed: Vec<(PathBuf, String)> = Vec::new();
+    for subtitle in pair.subtitles {
+        let path = subtitle
+            .to_str()
+            .with_context(|| format!("Failed to get path"))?;
+
+        let Ok(hash) = hotpath::measure_block!("hash_subtitle_file", {
+            let owned_path = path.to_owned();
+            spawn_blocking(move || hasher.sum_file(&owned_path)).await?
+        }) else {
+            continue;
+        };
+
+        subtitles_hashed.push((subtitle, hash.to_string()));
+    }
+
+    Ok(Some(MediaPairHashes {
+        media: media_hashed,
+        subtitles: subtitles_hashed,
+    }))
 }
 
 #[cfg(test)]

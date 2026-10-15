@@ -71,6 +71,7 @@ async fn process_library(
     path: PathBuf,
     orm_database: &DatabaseConnection,
     max_concurrent_parses: usize,
+    max_concurrent_hashes: usize,
 ) -> Result<()> {
     let hasher = Hasher::new();
     let mut found_files: Vec<i64> = Vec::new();
@@ -80,11 +81,11 @@ async fn process_library(
         .with_context(|| format!("failed scanning {}", path.display()))?;
 
     let files = find_media_subtitle_pairs(all_files).await;
-    let hased_pairs = hash_media_pairs(files, hasher).await?;
+    let hashed_pairs = hash_media_pairs(files, hasher, max_concurrent_hashes).await?;
     // path, hash
     let mut to_parse: Vec<MediaPairHashes> = Vec::new();
 
-    for pair in hased_pairs {
+    for pair in hashed_pairs {
         let media_to_parse: (PathBuf, String);
         let media_file = &pair.media;
         let should = should_parse_file(orm_database, &media_file.0, &media_file.1)
@@ -271,6 +272,7 @@ pub async fn indexing(config: AppConfig, orm_database: DatabaseConnection) -> Re
             path.clone(),
             &orm_database,
             config.file.concurrent_parse,
+            config.file.concurrent_hash,
         ))
         .await
         .with_context(|| format!("failed processing library {}", path.display()))?;
