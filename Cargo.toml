@@ -33,5 +33,10 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 default = []
 hotpath = ["hotpath/hotpath", "dep:tracing-subscriber"]
 hotpath-alloc = ["hotpath/hotpath-alloc"]
+hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 hotpath-prometheus = ["hotpath/hotpath-prometheus"]
 hotpath-cloud = ["hotpath/hotpath-cloud"]
+
+[profile.profiling]
+inherits = "release"
+debug = true

@@ -17,6 +17,7 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 default = []
 hotpath = ["hotpath/hotpath"]
 hotpath-alloc = ["hotpath/hotpath-alloc"]
+hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 hotpath-prometheus = ["hotpath/hotpath-prometheus"]
 hotpath-cloud = ["hotpath/hotpath-cloud"]
 
