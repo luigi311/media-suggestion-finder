@@ -149,6 +149,7 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
     pairs
 }
 
+#[hotpath::measure]
 pub async fn hash_media_pairs(
     pairs: Vec<MediaPair>,
     hasher: Hasher,
