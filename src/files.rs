@@ -1,5 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_recursion::async_recursion;
+use imohash::Hasher;
 use std::path::PathBuf;
 use tokio::fs::read_dir;
 
@@ -17,6 +18,13 @@ pub struct DirectoryScan {
 pub struct MediaPair {
     pub media: Option<PathBuf>,
     pub subtitles: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MediaPairHashes {
+    // Path, Hash
+    pub media: (PathBuf, String),
+    pub subtitles: Vec<(PathBuf, String)>,
 }
 
 #[hotpath::measure]
@@ -139,6 +147,54 @@ pub async fn find_media_subtitle_pairs(files: Vec<DirectoryScan>) -> Vec<MediaPa
     }
 
     pairs
+}
+
+pub async fn hash_media_pairs(
+    pairs: Vec<MediaPair>,
+    hasher: Hasher,
+) -> Result<Vec<MediaPairHashes>> {
+    let mut hashed_pairs: Vec<MediaPairHashes> = Vec::new();
+
+    for pair in pairs {
+        let media_hashed: (PathBuf, String);
+        if let Some(media) = pair.media {
+            let path = media
+                .to_str()
+                .with_context(|| format!("Failed to get path"))?;
+
+            let hash = hotpath::measure_block!("hash_media_file", {
+                let hash = hasher.sum_file(path);
+                hash
+            })?
+            .to_string();
+
+            media_hashed = (media, hash);
+        } else {
+            continue;
+        }
+
+        let mut subtitles_hashed: Vec<(PathBuf, String)> = Vec::new();
+        for subtitle in pair.subtitles {
+            let path = subtitle
+                .to_str()
+                .with_context(|| format!("Failed to get path"))?;
+
+            let hash = hotpath::measure_block!("hash_subtitle_file", {
+                let hash = hasher.sum_file(path);
+                hash
+            })?
+            .to_string();
+
+            subtitles_hashed.push((subtitle, hash));
+        }
+
+        hashed_pairs.push(MediaPairHashes {
+            media: media_hashed,
+            subtitles: subtitles_hashed,
+        })
+    }
+
+    Ok(hashed_pairs)
 }
 
 #[cfg(test)]
