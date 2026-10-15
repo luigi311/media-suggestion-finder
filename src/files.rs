@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use async_recursion::async_recursion;
 use imohash::Hasher;
 use std::path::PathBuf;
-use tokio::fs::read_dir;
+use tokio::{fs::read_dir, task::spawn_blocking};
 
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "mkv", "avi", "mov", "wmv"];
 const AUDIO_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "ogg"];
@@ -162,13 +162,18 @@ pub async fn hash_media_pairs(
                 .to_str()
                 .with_context(|| format!("Failed to get path"))?;
 
-            let hash = hotpath::measure_block!("hash_media_file", {
-                let hash = hasher.sum_file(path);
-                hash
-            })?
-            .to_string();
+            let Ok(hash) = hotpath::measure_block!("hash_media_file", {
+                let owned_path = path.to_owned();
+                spawn_blocking(move || {
+                    let hash = hasher.sum_file(&owned_path);
+                    hash
+                })
+                .await?
+            }) else {
+                continue;
+            };
 
-            media_hashed = (media, hash);
+            media_hashed = (media, hash.to_string());
         } else {
             continue;
         }
@@ -179,13 +184,18 @@ pub async fn hash_media_pairs(
                 .to_str()
                 .with_context(|| format!("Failed to get path"))?;
 
-            let hash = hotpath::measure_block!("hash_subtitle_file", {
-                let hash = hasher.sum_file(path);
-                hash
-            })?
-            .to_string();
+            let Ok(hash) = hotpath::measure_block!("hash_subtitle_file", {
+                let owned_path = path.to_owned();
+                spawn_blocking(move || {
+                    let hash = hasher.sum_file(&owned_path);
+                    hash
+                })
+                .await?
+            }) else {
+                continue;
+            };
 
-            subtitles_hashed.push((subtitle, hash));
+            subtitles_hashed.push((subtitle, hash.to_string()));
         }
 
         hashed_pairs.push(MediaPairHashes {
