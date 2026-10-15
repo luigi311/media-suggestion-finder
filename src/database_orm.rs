@@ -339,7 +339,6 @@ pub async fn get_file_metadata(
         .column(files::Column::Extension)
         .column(files::Column::SizeBytes)
         .filter(files::Column::Id.eq(file_id))
-        .filter(files::Column::MissingSince.is_null())
         .inner_join(Directories)
         .inner_join(MediaFiles) // Only fetch media file ids
         .into_tuple()
