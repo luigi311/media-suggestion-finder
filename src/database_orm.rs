@@ -2,8 +2,8 @@ use anyhow::Result;
 use chrono::Utc;
 use migration::{Expr, Migrator, MigratorTrait};
 use sea_orm::{
-    ConnectOptions, Database, DatabaseConnection, FromQueryResult, QueryFilter, QuerySelect, entity::*,
-    prelude::DateTimeWithTimeZone,
+    ConnectOptions, Database, DatabaseConnection, FromQueryResult, QueryFilter, QuerySelect,
+    entity::*, prelude::DateTimeWithTimeZone,
 };
 use serde::Serialize;
 use std::{collections::HashMap, time::Duration};

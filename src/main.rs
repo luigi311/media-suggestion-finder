@@ -5,15 +5,11 @@ use config::{Config, ConfigError, File};
 
 mod comparison;
 mod database_orm;
-mod database_process;
-mod files;
-mod indexer;
-mod media;
-mod web;
+mod scanner;
 
+use crate::comparison::webserver;
 use crate::database_orm::database_connect;
-use crate::indexer::indexing;
-use crate::web::webserver;
+use crate::scanner::indexing;
 
 #[derive(Clone)]
 struct FileConfig {

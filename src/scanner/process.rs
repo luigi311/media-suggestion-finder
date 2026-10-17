@@ -15,7 +15,7 @@ use crate::database_orm::{
     get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_primary_id_from_file_stream,
     get_video_stream_primary_id_from_file_stream,
 };
-use crate::media::{AudioStream, SubtitleStream, VideoStream};
+use crate::scanner::media::{AudioStream, SubtitleStream, VideoStream};
 
 #[hotpath::measure]
 pub async fn process_directory(database: &DatabaseConnection, directory: &Path) -> Result<i64> {

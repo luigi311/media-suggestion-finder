@@ -7,7 +7,8 @@ use axum::{Router, routing::get};
 use sea_orm::DatabaseConnection;
 
 use crate::AppConfig;
-use crate::comparison::{MediaOutlier, SiblingAnalysis, analyse_siblings, generate_outliers};
+use crate::comparison::engine::{MediaOutlier, generate_outliers};
+use crate::comparison::siblings::{SiblingAnalysis, analyse_siblings};
 use crate::database_orm::{
     MediaMetadata, SingleList, database_connect, get_all_metadata,
     get_directories_with_media_files, get_file_metadata, get_metadata_from_directory,
