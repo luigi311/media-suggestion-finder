@@ -10,8 +10,8 @@ use crate::AppConfig;
 use crate::comparison::engine::{MediaOutlier, generate_outliers};
 use crate::comparison::siblings::{SiblingAnalysis, analyse_siblings};
 use crate::database_orm::{
-    MediaMetadata, SingleList, database_connect, get_all_metadata,
-    get_directories_with_media_files, get_file_metadata, get_metadata_from_directory,
+    MediaMetadata, database_connect, get_all_metadata, get_directories_with_media_files,
+    get_file_metadata, get_metadata_from_directory,
 };
 
 #[hotpath::measure]
@@ -96,7 +96,7 @@ async fn outliers(
         })?;
 
     let mut outliers: Vec<MediaOutlier> = Vec::new();
-    let metadatas = get_metadata_from_directory(&orm_database, SingleList::List(directories_ids))
+    let metadatas = get_metadata_from_directory(&orm_database, directories_ids)
         .await
         .map_err(|e| {
             eprintln!("failed fetching media metadata for directory ids: {e}");

@@ -13,11 +13,6 @@ use entity::{prelude::*, *};
 // Chunk size to avoid to many parameters at once due to database limits
 const CHUNK_SIZE: usize = 1000;
 
-pub enum SingleList {
-    Single(i64),
-    List(Vec<i64>),
-}
-
 #[hotpath::measure]
 pub async fn database_connect(dsn: &String, migrate: bool) -> Result<DatabaseConnection> {
     let mut opt: ConnectOptions = ConnectOptions::new(dsn);
@@ -330,13 +325,8 @@ struct Streams {
 #[hotpath::measure]
 pub async fn get_metadata_from_directory(
     conn: &DatabaseConnection,
-    directory_id: SingleList,
+    directory_ids: Vec<i64>,
 ) -> Result<HashMap<i64, Vec<MediaMetadata>>> {
-    let directory_ids = match directory_id {
-        SingleList::Single(id) => vec![id],
-        SingleList::List(ids) => ids,
-    };
-
     let mut metadata: HashMap<i64, Vec<MediaMetadata>> = HashMap::new();
 
     for dir_chunk in directory_ids.chunks(CHUNK_SIZE) {
