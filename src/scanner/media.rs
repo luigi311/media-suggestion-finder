@@ -6,10 +6,10 @@ use tokio::task::spawn_blocking;
 
 #[derive(Clone, Debug)]
 pub struct VideoStream {
-    pub index: i32,
+    pub index: i64,
     pub codec: String,
-    pub width: i32,
-    pub height: i32,
+    pub width: i64,
+    pub height: i64,
     pub bitdepth: Option<i8>,
     pub hdr: Option<String>,
     pub bitrate: Option<i64>,
@@ -17,7 +17,7 @@ pub struct VideoStream {
 
 #[derive(Clone, Debug)]
 pub struct AudioStream {
-    pub index: i32,
+    pub index: i64,
     pub title: Option<String>,
     pub codec: String,
     pub language: Option<String>,
@@ -29,7 +29,7 @@ pub struct AudioStream {
 
 #[derive(Clone, Debug)]
 pub struct SubtitleStream {
-    pub index: i32,
+    pub index: i64,
     pub title: Option<String>,
     pub codec: String,
     pub language: Option<String>,
@@ -115,10 +115,10 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             let subtitle_streams = media.streams(StreamKind::Text);
 
             for stream in video_streams {
-                let index: i32 = stream.get("StreamKindID").to_string().parse()?;
+                let index: i64 = stream.get("StreamKindID").to_string().parse()?;
                 let codec: String = stream.get("Format").to_string();
-                let width: i32 = stream.get("Width").parse()?;
-                let height: i32 = stream.get("Height").parse()?;
+                let width: i64 = stream.get("Width").parse()?;
+                let height: i64 = stream.get("Height").parse()?;
                 let bitdepth = parse_bitdepth(stream.get("BitDepth"));
                 let bitrate = parse_bitrate(stream.get("BitRate"));
 
@@ -134,7 +134,7 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             }
 
             for stream in audio_streams {
-                let index: i32 = stream.get("StreamKindID").to_string().parse()?;
+                let index: i64 = stream.get("StreamKindID").to_string().parse()?;
                 let title: Option<String> = stream.get("Title").to_string().into();
                 let codec: String = stream.get("Format").to_string();
                 let language = parse_language(stream.get("Language"))?;
@@ -156,7 +156,7 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
             }
 
             for stream in subtitle_streams {
-                let index: i32 = stream.get("StreamKindID").to_string().parse()?;
+                let index: i64 = stream.get("StreamKindID").to_string().parse()?;
                 let title: Option<String> = stream.get("Title").to_string().into();
                 let codec: String = stream.get("Format").to_string();
                 let language = parse_language(stream.get("Language"))?;

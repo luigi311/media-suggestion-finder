@@ -117,7 +117,7 @@ pub async fn get_subtitle_file_primary_id_from_file_id(
 pub async fn get_video_stream_primary_id_from_file_stream(
     conn: &DatabaseConnection,
     file_id: i64,
-    index: i32,
+    index: i64,
 ) -> Result<Option<i64>> {
     let result: Option<i64> = VideoStreams::find()
         .select_only()
@@ -134,7 +134,7 @@ pub async fn get_video_stream_primary_id_from_file_stream(
 pub async fn get_audio_stream_primary_id_from_file_stream(
     conn: &DatabaseConnection,
     file_id: i64,
-    index: i32,
+    index: i64,
 ) -> Result<Option<i64>> {
     let result: Option<i64> = AudioStreams::find()
         .select_only()
@@ -151,7 +151,7 @@ pub async fn get_audio_stream_primary_id_from_file_stream(
 pub async fn get_subtitle_stream_primary_id_from_file_stream(
     conn: &DatabaseConnection,
     file_id: i64,
-    index: i32,
+    index: i64,
 ) -> Result<Option<i64>> {
     let result: Option<i64> = SubtitleStreams::find()
         .select_only()

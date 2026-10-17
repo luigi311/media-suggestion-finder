@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use entity::{
     audio_streams, directories, files, media_files, subtitle_files, subtitle_streams, video_streams,
 };
+use sea_orm::ActiveModelTrait;
 use sea_orm::{
     ActiveValue::Set, DatabaseConnection, EntityTrait, InsertResult, prelude::DateTimeWithTimeZone,
 };
@@ -74,6 +75,20 @@ pub async fn process_file(
         .to_string_lossy()
         .to_lowercase();
 
+    let extension = file
+        .extension()
+        .expect("Failed to get extension")
+        .to_str()
+        .expect("Failed to convert to string");
+
+    let metadata = fs::metadata(file).await?;
+    let size: i64 = metadata.len() as i64;
+    let created_at = metadata.created()?;
+    let modified_at = metadata.modified()?;
+    // TODO: Replace with jiff as chrono is soft dropped, waiting on seaorm support
+    let created_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(created_at).into();
+    let modified_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(modified_at).into();
+
     let mut file_id = get_file_primary_id_from_name_extension(database, directory_id, file_name, file_extension.as_str())
         .await
         .with_context(|| {
@@ -81,29 +96,51 @@ pub async fn process_file(
         })?;
 
     match file_id {
-        Some(_) => {
-            println!("File changed, updating metadata: {}", file.display());
+        Some(id) => {
+            println!("File changed, updating metadata: {} {}", id, file.display());
+            let file: Option<files::Model> = files::Entity::find_by_id(id)
+                .one(database)
+                .await
+                .with_context(|| {
+                    format!("failed loading existing file id={id} for metadata update")
+                })?;
+
+            match file {
+                Some(file) => {
+                    let mut changes: files::ActiveModel = file.into();
+
+                    changes.hash = Set(hash);
+                    changes.size_bytes = Set(size);
+                    changes.created_at = Set(created_chrono);
+                    changes.modified_at = Set(modified_chrono);
+
+                    let res: files::Model = changes.update(database).await.with_context(|| {
+                        format!(
+                            "failed updating file: \
+                                id={id},
+                                directory_id={directory_id}, \
+                                name={file_name}"
+                        )
+                    })?;
+
+                    file_id = Some(res.id);
+                }
+                None => {
+                    println!(
+                        "Unable to find file to update: \
+                        id={id},
+                        directory_id={directory_id}, \
+                        name={file_name}"
+                    )
+                }
+            };
         }
         None => {
-            let extension = file
-                .extension()
-                .expect("Failed to get extension")
-                .to_str()
-                .expect("Failed to convert to string");
-
-            let metadata = fs::metadata(file).await?;
-            let size: i64 = metadata.len() as i64;
-            let created_at = metadata.created()?;
-            let modified_at = metadata.modified()?;
-            // TODO: Replace with jiff as chrono is soft dropped, waiting on seaorm support
-            let created_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(created_at).into();
-            let modified_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(modified_at).into();
-
             let file: files::ActiveModel = files::ActiveModel {
                 directory_id: Set(directory_id),
                 name: Set(file_name.to_string()),
                 extension: Set(extension.to_string()),
-                hash: Set(hash.to_string()),
+                hash: Set(hash),
                 hash_algorithm: Set("imohash".to_string()),
                 size_bytes: Set(size),
                 created_at: Set(created_chrono),
@@ -213,16 +250,57 @@ pub async fn process_video_stream(
             })?;
 
     match video_stream_id {
-        // TODO: Handle updating existing video_stream
-        Some(_) => {}
+        Some(id) => {
+            let stream: Option<video_streams::Model> = video_streams::Entity::find_by_id(id)
+                .one(database)
+                .await
+                .with_context(|| {
+                    format!("failed loading existing file id={id} for metadata update")
+                })?;
+
+            match stream {
+                Some(stream) => {
+                    let mut changes: video_streams::ActiveModel = stream.into();
+                    let vid_bit: Option<i64> = video.bitdepth.map(|l| l as i64);
+
+                    changes.codec = Set(video.codec);
+                    changes.width = Set(video.width);
+                    changes.height = Set(video.height);
+                    changes.bit_depth = Set(vid_bit);
+                    changes.bitrate = Set(video.bitrate);
+
+                    let res: video_streams::Model =
+                        changes.update(database).await.with_context(|| {
+                            format!(
+                                "failed updating video stream: \
+                                id={id},
+                                file_id={file_id},
+                                stream_index={video_index}
+                            "
+                            )
+                        })?;
+
+                    video_stream_id = Some(res.id);
+                }
+                None => {
+                    println!(
+                        "Unable to find video stream to update: \
+                            id={id},
+                            file_id={file_id},
+                            stream_index={video_index}
+                        "
+                    )
+                }
+            };
+        }
         None => {
             let vid_bit: Option<i64> = video.bitdepth.map(|l| l as i64);
             let stream: video_streams::ActiveModel = video_streams::ActiveModel {
                 file_id: Set(file_id),
-                stream_index: Set(video_index.into()),
+                stream_index: Set(video_index),
                 codec: Set(video.codec),
-                width: Set(video.width.into()),
-                height: Set(video.height.into()),
+                width: Set(video.width),
+                height: Set(video.height),
                 bit_depth: Set(vid_bit),
                 hdr_format: Set(None),
                 bitrate: Set(video.bitrate),
@@ -265,12 +343,52 @@ pub async fn process_audio_stream(
             })?;
 
     match audio_stream_id {
-        // TODO: Handle updating existing audio_stream
-        Some(_) => {}
+        Some(id) => {
+            let stream: Option<audio_streams::Model> = audio_streams::Entity::find_by_id(id)
+                .one(database)
+                .await
+                .with_context(|| {
+                    format!("failed loading existing file id={id} for metadata update")
+                })?;
+
+            match stream {
+                Some(stream) => {
+                    let mut changes: audio_streams::ActiveModel = stream.into();
+                    changes.title = Set(audio.title);
+                    changes.codec = Set(audio.codec);
+                    changes.channels = Set(audio.channels.into());
+                    changes.bitrate = Set(audio.bitrate);
+                    changes.is_default = Set(audio.default);
+                    changes.is_forced = Set(audio.forced);
+
+                    let res: audio_streams::Model =
+                        changes.update(database).await.with_context(|| {
+                            format!(
+                                "failed updating audio stream: \
+                                id={id},
+                                file_id={file_id},
+                                stream_index={audio_index}
+                            "
+                            )
+                        })?;
+
+                    audio_stream_id = Some(res.id);
+                }
+                None => {
+                    println!(
+                        "Unable to find audio stream to update: \
+                            id={id},
+                            file_id={file_id},
+                            stream_index={audio_index}
+                        "
+                    )
+                }
+            };
+        }
         None => {
             let stream: audio_streams::ActiveModel = audio_streams::ActiveModel {
                 file_id: Set(file_id),
-                stream_index: Set(audio.index.into()),
+                stream_index: Set(audio.index),
                 title: Set(audio.title),
                 codec: Set(audio.codec),
                 language: Set(audio.language),
@@ -317,12 +435,53 @@ pub async fn process_subtitle_stream(
             })?;
 
     match subtitle_stream_id {
-        // TODO: Handle updating existing subtitle_streams
-        Some(_) => {}
+        Some(id) => {
+            let stream: Option<subtitle_streams::Model> = subtitle_streams::Entity::find_by_id(id)
+                .one(database)
+                .await
+                .with_context(|| {
+                    format!("failed loading existing file id={id} for metadata update")
+                })?;
+
+            match stream {
+                Some(stream) => {
+                    let mut changes: subtitle_streams::ActiveModel = stream.into();
+
+                    changes.title = Set(subtitle.title);
+                    changes.codec = Set(subtitle.codec);
+                    changes.language = Set(subtitle.language);
+                    changes.is_default = Set(subtitle.default);
+                    changes.is_forced = Set(subtitle.forced);
+                    changes.is_sdh = Set(subtitle.sdh);
+
+                    let res: subtitle_streams::Model =
+                        changes.update(database).await.with_context(|| {
+                            format!(
+                                "failed updating subtitle stream: \
+                                id={id},
+                                file_id={file_id},
+                                stream_index={sub_index}
+                            "
+                            )
+                        })?;
+
+                    subtitle_stream_id = Some(res.id);
+                }
+                None => {
+                    println!(
+                        "Unable to find subtitle stream to update: \
+                            id={id},
+                            file_id={file_id},
+                            stream_index={sub_index}
+                        "
+                    )
+                }
+            };
+        }
         None => {
             let stream: subtitle_streams::ActiveModel = subtitle_streams::ActiveModel {
                 file_id: Set(file_id),
-                stream_index: Set(subtitle.index.into()),
+                stream_index: Set(subtitle.index),
                 title: Set(subtitle.title),
                 codec: Set(subtitle.codec),
                 language: Set(subtitle.language),

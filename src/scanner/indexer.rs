@@ -8,14 +8,14 @@ use sea_orm::DatabaseConnection;
 
 use crate::AppConfig;
 use crate::database_orm::{get_file_primary_id_from_hash, update_missing_files};
-use crate::scanner::process::{
-    process_audio_stream, process_directory, process_file, process_media_file,
-    process_subtitle_file, process_subtitle_stream, process_video_stream,
-};
 use crate::scanner::files::{
     MediaPairHashes, find_media_subtitle_pairs, hash_media_pairs, iterate_folder,
 };
 use crate::scanner::media::{Media, parse_media};
+use crate::scanner::process::{
+    process_audio_stream, process_directory, process_file, process_media_file,
+    process_subtitle_file, process_subtitle_stream, process_video_stream,
+};
 
 #[derive(Clone, Debug)]
 struct ParsedMedia {
@@ -180,6 +180,8 @@ async fn process_library(
             })?;
 
         // Video Streams
+        // TODO: Remove streams that no longer exists,
+        // if contains 1-3 streams then if database has 4-6 are never updated/cleanedup
         for video in media.videos {
             let video_index = video.index;
 
