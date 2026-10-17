@@ -7,7 +7,9 @@ use tokio::time::{Duration, sleep};
 use sea_orm::DatabaseConnection;
 
 use crate::AppConfig;
-use crate::database_orm::{get_file_primary_id_from_hash, update_missing_files};
+use crate::database_orm::{
+    get_file_primary_id_from_hash, get_file_primary_id_from_name_extension, update_missing_files,
+};
 use crate::scanner::files::{
     MediaPairHashes, find_media_subtitle_pairs, hash_media_pairs, iterate_folder,
 };
@@ -39,11 +41,41 @@ async fn should_parse_file(
         .with_context(|| format!("failed processing directory {}", parent.display()))?;
 
     // Check if hash exists in directory_id if not parse and process
-    let parsed_media: (bool, Option<i64>) =
+    let mut parsed_media: (bool, Option<i64>) =
         match get_file_primary_id_from_hash(orm_database, directory_id, hash).await? {
             Some(file_id) => (false, Some(file_id)),
             None => (true, None),
         };
+
+    let name = file
+        .file_stem()
+        .expect("Failed to get file name")
+        .to_string_lossy()
+        .to_string();
+
+    let extension = file
+        .extension()
+        .expect("Failed to get file extension")
+        .to_string_lossy()
+        .to_lowercase()
+        .to_string();
+
+    // Check if hash and path file id match to handle cases where a file is renamed to override another
+    // Ex S00E01 - Special.mkv -> E00E01.mkv the hash lookup will find it but then update the wrong id because
+    if let Some(file_id) = parsed_media.1 {
+        match get_file_primary_id_from_name_extension(orm_database, directory_id, &name, &extension)
+            .await?
+        {
+            Some(path_file_id) => {
+                if file_id != path_file_id {
+                    parsed_media = (true, None);
+                }
+            }
+            None => {
+                parsed_media = (true, None);
+            }
+        }
+    }
 
     Ok(parsed_media)
 }

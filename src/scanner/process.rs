@@ -11,9 +11,9 @@ use std::path::Path;
 use tokio::fs;
 
 use crate::database_orm::{
-    drop_audio_stream_from_file_stream, drop_subtitle_stream_from_file_stream,
+    drop_audio_stream_from_file_stream, drop_file_from_id, drop_subtitle_stream_from_file_stream,
     drop_video_stream_from_file_stream, get_audio_stream_indexes_from_file,
-    get_audio_stream_primary_id_from_file_stream, get_directory_id,
+    get_audio_stream_primary_id_from_file_stream, get_directory_id, get_file_primary_id_from_hash,
     get_file_primary_id_from_name_extension, get_media_file_primary_id_from_file_id,
     get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_indexes_from_file,
     get_subtitle_stream_primary_id_from_file_stream, get_video_stream_indexes_from_file,
@@ -69,20 +69,15 @@ pub async fn process_file(
     let file_name = file
         .file_stem()
         .expect("Failed to get file name")
-        .to_str()
-        .expect("Failed to convert to str");
+        .to_string_lossy()
+        .to_string();
 
     let file_extension = file
         .extension()
         .expect("Failed to get file extension")
         .to_string_lossy()
-        .to_lowercase();
-
-    let extension = file
-        .extension()
-        .expect("Failed to get extension")
-        .to_str()
-        .expect("Failed to convert to string");
+        .to_lowercase()
+        .to_string();
 
     let metadata = fs::metadata(file).await?;
     let size: i64 = metadata.len() as i64;
@@ -92,15 +87,20 @@ pub async fn process_file(
     let created_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(created_at).into();
     let modified_chrono: DateTimeWithTimeZone = DateTime::<Utc>::from(modified_at).into();
 
-    let mut file_id = get_file_primary_id_from_name_extension(database, directory_id, file_name, file_extension.as_str())
+    let path_file_id = get_file_primary_id_from_name_extension(database, directory_id, &file_name, &file_extension)
         .await
         .with_context(|| {
             format!("failed looking up file from directory_id={directory_id} file_name={file_name} file_extension={file_extension}")
         })?;
 
+    let mut file_id = get_file_primary_id_from_hash(database, directory_id, &hash)
+        .await
+        .with_context(|| {
+            format!("failed looking up file from directory_id={directory_id} hash={hash}")
+        })?;
+
     match file_id {
         Some(id) => {
-            println!("File changed, updating metadata: {} {}", id, file.display());
             let file: Option<files::Model> = files::Entity::find_by_id(id)
                 .one(database)
                 .await
@@ -112,10 +112,19 @@ pub async fn process_file(
                 Some(file) => {
                     let mut changes: files::ActiveModel = file.into();
 
+                    changes.name = Set(file_name.clone());
+                    changes.extension = Set(file_extension.clone());
                     changes.hash = Set(hash);
                     changes.size_bytes = Set(size);
                     changes.created_at = Set(created_chrono);
                     changes.modified_at = Set(modified_chrono);
+
+                    // If there is an existing file id at the path then delete it to avoid conflicts
+                    if let Some(path_id) = path_file_id {
+                        if path_id != id {
+                            drop_file_from_id(database, path_id).await?;
+                        }
+                    }
 
                     let res: files::Model = changes.update(database).await.with_context(|| {
                         format!(
@@ -139,10 +148,15 @@ pub async fn process_file(
             };
         }
         None => {
+            // If there is an existing file id at the path then delete it to avoid conflicts
+            if let Some(path_id) = path_file_id {
+                drop_file_from_id(database, path_id).await?;
+            }
+
             let file: files::ActiveModel = files::ActiveModel {
                 directory_id: Set(directory_id),
-                name: Set(file_name.to_string()),
-                extension: Set(extension.to_string()),
+                name: Set(file_name.clone()),
+                extension: Set(file_extension),
                 hash: Set(hash),
                 hash_algorithm: Set("imohash".to_string()),
                 size_bytes: Set(size),

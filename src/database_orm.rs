@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use migration::{Expr, Migrator, MigratorTrait};
 use sea_orm::{
@@ -51,8 +51,8 @@ pub async fn get_directory_id(conn: &DatabaseConnection, path: &str) -> Result<O
 pub async fn get_file_primary_id_from_name_extension(
     conn: &DatabaseConnection,
     directory_id: i64,
-    name: &str,
-    extension: &str,
+    name: &String,
+    extension: &String,
 ) -> Result<Option<i64>> {
     let result: Option<i64> = Files::find()
         .select_only()
@@ -82,6 +82,21 @@ pub async fn get_file_primary_id_from_hash(
         .await?;
 
     Ok(result)
+}
+
+#[hotpath::measure]
+pub async fn drop_file_from_id(conn: &DatabaseConnection, file_id: i64) -> Result<u64> {
+    if let Some(file) = files::Entity::find_by_id(file_id)
+        .one(conn)
+        .await
+        .with_context(|| format!("Failed to find file by id: {file_id}"))?
+    {
+        let res: DeleteResult = file.delete(conn).await?;
+
+        return Ok(res.rows_affected);
+    }
+
+    Ok(0)
 }
 
 pub async fn get_media_file_primary_id_from_file_id(
