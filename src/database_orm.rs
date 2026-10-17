@@ -2,8 +2,8 @@ use anyhow::Result;
 use chrono::Utc;
 use migration::{Expr, Migrator, MigratorTrait};
 use sea_orm::{
-    ConnectOptions, Database, DatabaseConnection, FromQueryResult, QueryFilter, QuerySelect,
-    entity::*, prelude::DateTimeWithTimeZone,
+    ConnectOptions, Database, DatabaseConnection, DeleteResult, FromQueryResult, QueryFilter,
+    QuerySelect, entity::*, prelude::DateTimeWithTimeZone,
 };
 use serde::Serialize;
 use std::{collections::HashMap, time::Duration};
@@ -131,6 +131,36 @@ pub async fn get_video_stream_primary_id_from_file_stream(
     Ok(result)
 }
 
+pub async fn get_video_stream_indexes_from_file(
+    conn: &DatabaseConnection,
+    file_id: i64,
+) -> Result<Vec<i64>> {
+    let result: Vec<i64> = VideoStreams::find()
+        .select_only()
+        .column(video_streams::Column::StreamIndex)
+        .filter(video_streams::Column::FileId.eq(file_id))
+        .into_tuple()
+        .all(conn)
+        .await?;
+
+    Ok(result)
+}
+
+#[hotpath::measure]
+pub async fn drop_video_stream_from_file_stream(
+    conn: &DatabaseConnection,
+    file_id: i64,
+    indexes: Vec<i64>,
+) -> Result<u64> {
+    let res: DeleteResult = video_streams::Entity::delete_many()
+        .filter(video_streams::Column::FileId.eq(file_id))
+        .filter(video_streams::Column::StreamIndex.is_in(indexes))
+        .exec(conn)
+        .await?;
+
+    Ok(res.rows_affected)
+}
+
 pub async fn get_audio_stream_primary_id_from_file_stream(
     conn: &DatabaseConnection,
     file_id: i64,
@@ -148,6 +178,36 @@ pub async fn get_audio_stream_primary_id_from_file_stream(
     Ok(result)
 }
 
+pub async fn get_audio_stream_indexes_from_file(
+    conn: &DatabaseConnection,
+    file_id: i64,
+) -> Result<Vec<i64>> {
+    let result: Vec<i64> = AudioStreams::find()
+        .select_only()
+        .column(audio_streams::Column::StreamIndex)
+        .filter(audio_streams::Column::FileId.eq(file_id))
+        .into_tuple()
+        .all(conn)
+        .await?;
+
+    Ok(result)
+}
+
+#[hotpath::measure]
+pub async fn drop_audio_stream_from_file_stream(
+    conn: &DatabaseConnection,
+    file_id: i64,
+    indexes: Vec<i64>,
+) -> Result<u64> {
+    let res: DeleteResult = audio_streams::Entity::delete_many()
+        .filter(audio_streams::Column::FileId.eq(file_id))
+        .filter(audio_streams::Column::StreamIndex.is_in(indexes))
+        .exec(conn)
+        .await?;
+
+    Ok(res.rows_affected)
+}
+
 pub async fn get_subtitle_stream_primary_id_from_file_stream(
     conn: &DatabaseConnection,
     file_id: i64,
@@ -163,6 +223,37 @@ pub async fn get_subtitle_stream_primary_id_from_file_stream(
         .await?;
 
     Ok(result)
+}
+
+#[hotpath::measure]
+pub async fn get_subtitle_stream_indexes_from_file(
+    conn: &DatabaseConnection,
+    file_id: i64,
+) -> Result<Vec<i64>> {
+    let result: Vec<i64> = SubtitleStreams::find()
+        .select_only()
+        .column(subtitle_streams::Column::StreamIndex)
+        .filter(subtitle_streams::Column::FileId.eq(file_id))
+        .into_tuple()
+        .all(conn)
+        .await?;
+
+    Ok(result)
+}
+
+#[hotpath::measure]
+pub async fn drop_subtitle_stream_from_file_stream(
+    conn: &DatabaseConnection,
+    file_id: i64,
+    indexes: Vec<i64>,
+) -> Result<u64> {
+    let res: DeleteResult = subtitle_streams::Entity::delete_many()
+        .filter(subtitle_streams::Column::FileId.eq(file_id))
+        .filter(subtitle_streams::Column::StreamIndex.is_in(indexes))
+        .exec(conn)
+        .await?;
+
+    Ok(res.rows_affected)
 }
 
 #[hotpath::measure]

@@ -11,9 +11,12 @@ use std::path::Path;
 use tokio::fs;
 
 use crate::database_orm::{
+    drop_audio_stream_from_file_stream, drop_subtitle_stream_from_file_stream,
+    drop_video_stream_from_file_stream, get_audio_stream_indexes_from_file,
     get_audio_stream_primary_id_from_file_stream, get_directory_id,
     get_file_primary_id_from_name_extension, get_media_file_primary_id_from_file_id,
-    get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_primary_id_from_file_stream,
+    get_subtitle_file_primary_id_from_file_id, get_subtitle_stream_indexes_from_file,
+    get_subtitle_stream_primary_id_from_file_stream, get_video_stream_indexes_from_file,
     get_video_stream_primary_id_from_file_stream,
 };
 use crate::scanner::media::{AudioStream, SubtitleStream, VideoStream};
@@ -233,6 +236,25 @@ pub async fn process_subtitle_file(
 }
 
 #[hotpath::measure]
+pub async fn cleanup_video_streams(
+    database: &DatabaseConnection,
+    file_id: i64,
+    indexes: Vec<i64>,
+) -> Result<()> {
+    // Fetch all existing indexes for file id
+    let mut cleanup: Vec<i64> = get_video_stream_indexes_from_file(database, file_id).await?;
+
+    // Keep only indexes that are not in the new files indexes
+    cleanup.retain(|x| !indexes.contains(x));
+    if cleanup.len() == 0 {
+        return Ok(());
+    }
+
+    drop_video_stream_from_file_stream(database, file_id, cleanup).await?;
+    Ok(())
+}
+
+#[hotpath::measure]
 pub async fn process_video_stream(
     database: &DatabaseConnection,
     file_id: i64,
@@ -326,6 +348,25 @@ pub async fn process_video_stream(
 }
 
 #[hotpath::measure]
+pub async fn cleanup_audio_streams(
+    database: &DatabaseConnection,
+    file_id: i64,
+    indexes: Vec<i64>,
+) -> Result<()> {
+    // Fetch all existing indexes for file id
+    let mut cleanup: Vec<i64> = get_audio_stream_indexes_from_file(database, file_id).await?;
+
+    // Keep only indexes that are not in the new files indexes
+    cleanup.retain(|x| !indexes.contains(x));
+    if cleanup.len() == 0 {
+        return Ok(());
+    }
+
+    drop_audio_stream_from_file_stream(database, file_id, cleanup).await?;
+    Ok(())
+}
+
+#[hotpath::measure]
 pub async fn process_audio_stream(
     database: &DatabaseConnection,
     file_id: i64,
@@ -415,6 +456,25 @@ pub async fn process_audio_stream(
     }
 
     audio_stream_id.context("Failed to generate audio stream id")
+}
+
+#[hotpath::measure]
+pub async fn cleanup_subtitle_streams(
+    database: &DatabaseConnection,
+    file_id: i64,
+    indexes: Vec<i64>,
+) -> Result<()> {
+    // Fetch all existing indexes for file id
+    let mut cleanup: Vec<i64> = get_subtitle_stream_indexes_from_file(database, file_id).await?;
+
+    // Keep only indexes that are not in the new files indexes
+    cleanup.retain(|x| !indexes.contains(x));
+    if cleanup.len() == 0 {
+        return Ok(());
+    }
+
+    drop_subtitle_stream_from_file_stream(database, file_id, cleanup).await?;
+    Ok(())
 }
 
 #[hotpath::measure]

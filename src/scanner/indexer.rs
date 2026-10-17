@@ -13,8 +13,9 @@ use crate::scanner::files::{
 };
 use crate::scanner::media::{Media, parse_media};
 use crate::scanner::process::{
-    process_audio_stream, process_directory, process_file, process_media_file,
-    process_subtitle_file, process_subtitle_stream, process_video_stream,
+    cleanup_audio_streams, cleanup_subtitle_streams, cleanup_video_streams, process_audio_stream,
+    process_directory, process_file, process_media_file, process_subtitle_file,
+    process_subtitle_stream, process_video_stream,
 };
 
 #[derive(Clone, Debug)]
@@ -180,8 +181,8 @@ async fn process_library(
             })?;
 
         // Video Streams
-        // TODO: Remove streams that no longer exists,
-        // if contains 1-3 streams then if database has 4-6 are never updated/cleanedup
+        let v_indexes: Vec<i64> = media.videos.iter().map(|x| x.index).collect();
+        cleanup_video_streams(&orm_database, file_id, v_indexes).await?;
         for video in media.videos {
             let video_index = video.index;
 
@@ -196,6 +197,8 @@ async fn process_library(
         }
 
         // Audio Streams
+        let a_indexes: Vec<i64> = media.audios.iter().map(|x| x.index).collect();
+        cleanup_audio_streams(&orm_database, file_id, a_indexes).await?;
         for audio in media.audios {
             let audio_index = audio.index;
 
@@ -210,6 +213,8 @@ async fn process_library(
         }
 
         // Subtitle streams
+        let s_indexes: Vec<i64> = media.subtitles.iter().map(|x| x.index).collect();
+        cleanup_subtitle_streams(&orm_database, file_id, s_indexes).await?;
         for sub in media.subtitles {
             let sub_index = sub.index;
 
@@ -243,6 +248,8 @@ async fn process_library(
                     )
                 })?;
 
+            let ss_indexes: Vec<i64> = subtitle.subtitles.iter().map(|x| x.index).collect();
+            cleanup_subtitle_streams(&orm_database, sub_file_id, ss_indexes).await?;
             for sub in subtitle.subtitles {
                 let sub_index = sub.index;
 
