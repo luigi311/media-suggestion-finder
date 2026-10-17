@@ -81,9 +81,10 @@ pub async fn process_file(
         })?;
 
     match file_id {
-        Some(_) => {}
+        Some(_) => {
+            println!("File changed, updating metadata: {}", file.display());
+        }
         None => {
-            println!("Inserting file: {}", file.display());
             let extension = file
                 .extension()
                 .expect("Failed to get extension")

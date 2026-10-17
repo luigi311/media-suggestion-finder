@@ -98,7 +98,6 @@ async fn process_library(
         match should {
             (true, None) => media_to_parse = media_file.clone(),
             (false, Some(file_id)) => {
-                println!("File {} is already processed", media_file.0.display());
                 found_files.push(file_id);
                 continue;
             }
@@ -116,7 +115,6 @@ async fn process_library(
                     subtitles_to_parse.push(sub_file.clone());
                 }
                 (false, Some(file_id)) => {
-                    println!("File {} is already processed", sub_file.0.display());
                     found_files.push(file_id);
                     continue;
                 }
@@ -162,7 +160,6 @@ async fn process_library(
         let media: Media = parse.media.1;
         let subtitles: Vec<(String, Media)> = parse.subtitles;
         let hash: String = parse.media.0;
-        println!("Processing {}", media.path.display());
 
         let parent = media.path.parent().expect("Failed to get parent path");
         let directory_id = process_directory(&orm_database, parent)

@@ -110,7 +110,6 @@ pub async fn parse_media(path: &PathBuf) -> Result<Media> {
     .await?;
     match opened {
         Ok(true) => {
-            println!("Parsing: {}", path.display());
             let video_streams = media.streams(StreamKind::Video);
             let audio_streams = media.streams(StreamKind::Audio);
             let subtitle_streams = media.streams(StreamKind::Text);

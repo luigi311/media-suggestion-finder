@@ -513,7 +513,7 @@ pub async fn update_missing_files(conn: &DatabaseConnection, found: Vec<i64>) ->
         .collect();
 
     if !newly_missing.is_empty() {
-        println!("Newly missing {:?}", newly_missing);
+        println!("Newly missing {} files", newly_missing.len());
         let now: DateTimeWithTimeZone = Utc::now().into();
 
         Files::update_many()
@@ -524,7 +524,7 @@ pub async fn update_missing_files(conn: &DatabaseConnection, found: Vec<i64>) ->
     }
 
     if !restored.is_empty() {
-        println!("Restored {:?}", restored);
+        println!("Restored {} files", restored.len());
         Files::update_many()
             .col_expr(
                 files::Column::MissingSince,
