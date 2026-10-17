@@ -516,23 +516,28 @@ pub async fn update_missing_files(conn: &DatabaseConnection, found: Vec<i64>) ->
         println!("Newly missing {} files", newly_missing.len());
         let now: DateTimeWithTimeZone = Utc::now().into();
 
-        Files::update_many()
-            .col_expr(files::Column::MissingSince, Expr::value(now))
-            .filter(files::Column::Id.is_in(newly_missing))
-            .exec(conn)
-            .await?;
+        for chunk in newly_missing.chunks(CHUNK_SIZE) {
+            Files::update_many()
+                .col_expr(files::Column::MissingSince, Expr::value(now))
+                .filter(files::Column::Id.is_in(chunk))
+                .exec(conn)
+                .await?;
+        }
     }
 
     if !restored.is_empty() {
         println!("Restored {} files", restored.len());
-        Files::update_many()
-            .col_expr(
-                files::Column::MissingSince,
-                Expr::value(Option::<DateTimeWithTimeZone>::None),
-            )
-            .filter(files::Column::Id.is_in(restored))
-            .exec(conn)
-            .await?;
+
+        for chunk in newly_missing.chunks(CHUNK_SIZE) {
+            Files::update_many()
+                .col_expr(
+                    files::Column::MissingSince,
+                    Expr::value(Option::<DateTimeWithTimeZone>::None),
+                )
+                .filter(files::Column::Id.is_in(chunk))
+                .exec(conn)
+                .await?;
+        }
     }
 
     Ok(())
