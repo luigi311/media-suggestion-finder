@@ -24,6 +24,7 @@ pub async fn webserver(config: &AppConfig) -> Result<()> {
     // build our application with a route
     let app = Router::new()
         .route("/", get(outliers))
+        .route("/{dir_id}", get(outliers_dir))
         .route("/metadata", get(metadata))
         .route("/metadata/{file_id}", get(metadata_file))
         .route("/dominant", get(dominant))
@@ -94,6 +95,33 @@ async fn outliers(
             eprintln!("failed fetching directories with media files: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    let mut outliers: Vec<MediaOutlier> = Vec::new();
+    let metadatas = get_metadata_from_directory(&orm_database, directories_ids)
+        .await
+        .map_err(|e| {
+            eprintln!("failed fetching media metadata for directory ids: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    for (dir_id, metadata) in metadatas {
+        let analysis = generate_outliers(metadata).await.map_err(|e| {
+            eprintln!("failed to generate outliers for directory id {dir_id}: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        outliers.extend(analysis);
+    }
+
+    Ok(Json(outliers))
+}
+
+#[hotpath::measure]
+async fn outliers_dir(
+    Path(dir_id): Path<i64>,
+    State(orm_database): State<DatabaseConnection>,
+) -> Result<Json<Vec<MediaOutlier>>, StatusCode> {
+    let directories_ids = vec![dir_id];
 
     let mut outliers: Vec<MediaOutlier> = Vec::new();
     let metadatas = get_metadata_from_directory(&orm_database, directories_ids)
