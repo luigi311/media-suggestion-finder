@@ -8,7 +8,8 @@ use crate::database_orm::MediaMetadata;
 #[derive(Clone, Debug, Serialize)]
 pub struct MediaOutlier {
     pub file_id: i64,
-    pub file_path: String,
+    pub directory_id: i64,
+    pub directory: String,
     pub file_name: String,
     pub issues: Vec<OutlierReason>,
 }
@@ -123,7 +124,8 @@ pub async fn generate_outliers(medias: Vec<MediaMetadata>) -> Result<Vec<MediaOu
         if !reasons.is_empty() {
             outliers.push(MediaOutlier {
                 file_id: media.file_id,
-                file_path: media.directory,
+                directory_id: media.directory_id,
+                directory: media.directory,
                 file_name: format!("{}.{}", media.name, media.extension),
                 issues: reasons,
             })
